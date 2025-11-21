@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AUEM (Audio Unified Extensible Modifications) is a composable audio augmentation library designed for ML training pipelines. It provides a unified interface over multiple audio augmentation backends (torch_audiomentations, pedalboard, etc.) with first-class Hydra/hydra-zen configuration support.
 
+## High Level Tips
+
+Don't generate extra examples or example files.
+
 ## Development Commands
 
 ### Setup and Installation
@@ -73,8 +77,9 @@ uv run mypy auem
   - Each adapter implements the common `BaseAugmentation` interface
 
 - `auem/config/`: Hydra configuration support
-  - `structured.py`: Hydra-zen structured configs for all augmentations
-  - `schemas.py`: Dataclasses and validation schemas
+  - `store.py`: Centralized hydra-zen ZenStore with all augmentation configs
+  - `structured.py`: Hydra-zen structured config utilities
+  - `schemas.py`: Dataclasses and validation schemas (future)
 
 - `auem/utils/`: Shared utilities
   - `audio.py`: Audio I/O and manipulation helpers
@@ -125,15 +130,53 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
 
 ### Hydra Integration
 
-All augmentations expose structured configs:
-- Use `hydra_zen.builds()` to create structured configs
-- Support nested composition through config groups
-- Config instantiation via `hydra.utils.instantiate()`
+**Centralized ZenStore**:
+The library provides a pre-configured `auementations_store` that contains all augmentation configs:
 
-Config organization:
-- `conf/augmentation/`: Individual augmentation configs
-- `conf/augmentation/compose/`: Composition pipeline configs
-- `conf/augmentation/adapter/`: Backend-specific settings
+```python
+from auementations.config import auementations_store
+
+# Access a config from the store
+gain_config = auementations_store.get_entry(
+    "augmentation/torch_audiomentations",
+    "gain"
+)
+
+# Instantiate from config
+from hydra_zen import instantiate
+gain_aug = instantiate(gain_config["node"], sample_rate=16000, ...)
+```
+
+**Store Groups**:
+- `augmentation/composition/`: Compose, OneOf, SomeOf
+- `augmentation/torch_audiomentations/`: Gain, PitchShift, AddColoredNoise, HighPassFilter, LowPassFilter, TimeStretch
+- `augmentation/pedalboard/`: (future)
+
+**External Repository Usage**:
+Other projects can merge the Auementations store with their own:
+
+```python
+from auementations.config import auementations_store
+from hydra_zen import ZenStore
+
+# Create your project store
+my_store = ZenStore(name="my_project")
+
+# Merge Auementations configs
+my_store = my_store.merge(auementations_store)
+
+# Now all Auementations configs are available
+# Add your own custom configs
+my_store(MyCustomConfig, group="augmentation/custom", name="my_aug")
+
+# Register with Hydra
+my_store.add_to_hydra_store()
+```
+
+**Config Creation**:
+- All configs created with `hydra_zen.builds()` with `populate_full_signature=True`
+- Configs are immutable and type-safe
+- Support nested composition through structured configs
 
 ### Testing Strategy
 

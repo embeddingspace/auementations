@@ -1,0 +1,49 @@
+# Example Hydra configuration for AUEM augmentation pipeline
+
+defaults:
+  - _self_
+
+# Audio data configuration
+data:
+  sample_rate: 16000
+  channels: 1
+  duration: 1.0
+
+# Augmentation pipeline configuration
+augmentation:
+  _target_: auem.core.composition.Compose
+  sample_rate: ${data.sample_rate}
+  p: 1.0
+  augmentations:
+    # First augmentation: always apply a small gain
+    - _target_: tests.conftest.MockAugmentation
+      sample_rate: ${data.sample_rate}
+      gain: 1.2
+      p: 1.0
+
+    # Second: choose one of several augmentations
+    - _target_: auem.core.composition.OneOf
+      sample_rate: ${data.sample_rate}
+      p: 0.7
+      weights: [0.5, 0.3, 0.2]
+      augmentations:
+        - _target_: tests.conftest.MockAugmentation
+          sample_rate: ${data.sample_rate}
+          gain: 1.5
+          p: 1.0
+
+        - _target_: tests.conftest.MockAugmentation
+          sample_rate: ${data.sample_rate}
+          gain: 2.0
+          p: 1.0
+
+        - _target_: tests.conftest.MockAugmentation
+          sample_rate: ${data.sample_rate}
+          gain: 2.5
+          p: 1.0
+
+# Training configuration (example)
+training:
+  batch_size: 32
+  num_epochs: 100
+  learning_rate: 0.001

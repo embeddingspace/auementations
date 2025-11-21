@@ -137,6 +137,32 @@ Config organization:
 
 ### Testing Strategy
 
+**TDD Workflow (RED, GREEN, REFACTOR)**:
+- Always write tests BEFORE implementation code
+- RED: Write a failing test that defines the desired behavior
+- GREEN: Write minimal code to make the test pass
+- REFACTOR: Clean up and optimize while keeping tests green
+- Never write production code without a failing test first
+
+**BDD Test Structure (GIVEN, WHEN, THEN)**:
+Tests should follow the Behavior-Driven Development pattern where practical:
+```python
+def test_gain_augmentation_applies_specified_gain():
+    # GIVEN: An audio sample and a gain augmentation with fixed gain
+    audio = torch.randn(1, 16000)
+    sample_rate = 16000
+    gain_db = 6.0
+    augmentation = Gain(gain_db=gain_db, sample_rate=sample_rate)
+
+    # WHEN: The augmentation is applied
+    result = augmentation(audio)
+
+    # THEN: The output amplitude is increased by the specified gain
+    expected_gain_linear = 10 ** (gain_db / 20)
+    assert torch.allclose(result, audio * expected_gain_linear, atol=1e-5)
+```
+
+**Test Types**:
 - Unit tests for each augmentation adapter (mock backend calls)
 - Integration tests with actual audio (fixtures in `tests/fixtures/audio/`)
 - Composition tests ensure proper chaining and probability handling

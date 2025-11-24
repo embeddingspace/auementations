@@ -26,3 +26,10 @@ __all__ = ["auementations_store"]
 
 from auementations.core.composition import *  # noqa
 from auementations.adapters.torch_audiomentations import *  # noqa
+
+# Import pedalboard adapters if available
+try:
+    from auementations.adapters.pedalboard import *  # noqa
+except ImportError:
+    # Pedalboard is optional
+    pass

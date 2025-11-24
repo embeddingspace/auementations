@@ -59,11 +59,11 @@ class TestStoreCompositionConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/composition", "oneof")
+        entry = auementations_store.get_entry("augmentation/composition", "one_of")
 
         # Then
         assert entry is not None
-        assert entry["name"] == "oneof"
+        assert entry["name"] == "one_of"
 
     def test_given_store_when_checking_someof_config_then_is_registered(self):
         """Given the store, when checking for SomeOf config, then it is registered."""
@@ -71,11 +71,11 @@ class TestStoreCompositionConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/composition", "someof")
+        entry = auementations_store.get_entry("augmentation/composition", "some_of")
 
         # Then
         assert entry is not None
-        assert entry["name"] == "someof"
+        assert entry["name"] == "some_of"
 
     def test_given_compose_config_when_instantiating_then_creates_compose_instance(
         self, sample_rate
@@ -86,7 +86,9 @@ class TestStoreCompositionConfigs:
         from auementations.core.composition import Compose
         from tests.conftest import MockAugmentation
 
-        compose_config = auementations_store(group="augmentation/composition", name="compose")
+        compose_config = auementations_store(
+            group="augmentation/composition", name="compose"
+        )
 
         # Create a config with actual augmentations
         config_dict = {
@@ -115,7 +117,9 @@ class TestStoreTorchAudiomentationsConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/torch_audiomentations", "gain")
+        entry = auementations_store.get_entry(
+            "augmentation/torch_audiomentations", "gain"
+        )
 
         # Then
         assert entry is not None
@@ -128,19 +132,25 @@ class TestStoreTorchAudiomentationsConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/torch_audiomentations", "pitch_shift")
+        entry = auementations_store.get_entry(
+            "augmentation/torch_audiomentations", "pitch_shift"
+        )
 
         # Then
         assert entry is not None
         assert entry["name"] == "pitch_shift"
 
-    def test_given_store_when_checking_add_colored_noise_config_then_is_registered(self):
+    def test_given_store_when_checking_add_colored_noise_config_then_is_registered(
+        self,
+    ):
         """Given the store, when checking for AddColoredNoise config, then it is registered."""
         # Given
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/torch_audiomentations", "add_colored_noise")
+        entry = auementations_store.get_entry(
+            "augmentation/torch_audiomentations", "add_colored_noise"
+        )
 
         # Then
         assert entry is not None
@@ -151,7 +161,9 @@ class TestStoreTorchAudiomentationsConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/torch_audiomentations", "high_pass_filter")
+        entry = auementations_store.get_entry(
+            "augmentation/torch_audiomentations", "hpf"
+        )
 
         # Then
         assert entry is not None
@@ -162,7 +174,9 @@ class TestStoreTorchAudiomentationsConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/torch_audiomentations", "low_pass_filter")
+        entry = auementations_store.get_entry(
+            "augmentation/torch_audiomentations", "lpf"
+        )
 
         # Then
         assert entry is not None
@@ -173,7 +187,9 @@ class TestStoreTorchAudiomentationsConfigs:
         from auementations.config import auementations_store
 
         # When
-        entry = auementations_store.get_entry("augmentation/torch_audiomentations", "time_stretch")
+        entry = auementations_store.get_entry(
+            "augmentation/torch_audiomentations", "time_stretch"
+        )
 
         # Then
         assert entry is not None
@@ -182,7 +198,9 @@ class TestStoreTorchAudiomentationsConfigs:
 class TestStoreExternalRepoUsage:
     """Test scenarios for external repositories using the AUEM store."""
 
-    def test_given_auem_store_when_merging_to_external_store_then_configs_available(self):
+    def test_given_auem_store_when_merging_to_external_store_then_configs_available(
+        self,
+    ):
         """Given Auementations store, when merging to external store, then configs are available."""
         # Given
         from auementations.config import auementations_store
@@ -195,16 +213,15 @@ class TestStoreExternalRepoUsage:
         # Then
         # Merged store should have Auementations configs
         assert merged_store.get_entry("augmentation/composition", "compose") is not None
-        assert merged_store.get_entry("augmentation/composition", "oneof") is not None
-        assert merged_store.get_entry("augmentation/composition", "someof") is not None
+        assert merged_store.get_entry("augmentation/composition", "one_of") is not None
+        assert merged_store.get_entry("augmentation/composition", "some_of") is not None
 
-    def test_given_merged_store_when_adding_custom_configs_then_both_available(
-        self
-    ):
+    def test_given_merged_store_when_adding_custom_configs_then_both_available(self):
         """Given merged store, when adding custom configs, then both Auementations and custom configs available."""
         # Given
-        from auementations.config import auementations_store
         from hydra_zen import builds
+
+        from auementations.config import auementations_store
         from tests.conftest import MockAugmentation
 
         external_store = ZenStore(name="external_project")
@@ -218,11 +235,7 @@ class TestStoreExternalRepoUsage:
             gain=5.0,
             populate_full_signature=True,
         )
-        merged_store(
-            custom_config,
-            group="augmentation/custom",
-            name="custom_mock"
-        )
+        merged_store(custom_config, group="augmentation/custom", name="custom_mock")
 
         # Then
         # Both Auementations and custom configs should be available

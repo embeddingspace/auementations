@@ -1,11 +1,14 @@
 """Composition classes for building augmentation pipelines."""
 
 from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
 
+from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
 
 
+@auementations_store(name="compose", group="augmentation/composition")
 class Compose(BaseAugmentation):
     """Sequential composition of augmentations.
 
@@ -54,7 +57,9 @@ class Compose(BaseAugmentation):
                     f"for {aug.__class__.__name__}"
                 )
 
-    def __call__(self, audio: Union[np.ndarray, Any], **kwargs) -> Union[np.ndarray, Any]:
+    def __call__(
+        self, audio: Union[np.ndarray, Any], **kwargs
+    ) -> Union[np.ndarray, Any]:
         """Apply augmentations sequentially.
 
         Args:
@@ -85,6 +90,7 @@ class Compose(BaseAugmentation):
         return f"Compose([\n  {aug_reprs}\n])"
 
 
+@auementations_store(name="one_of", group="augmentation/composition")
 class OneOf(BaseAugmentation):
     """Randomly select and apply one augmentation from a list.
 
@@ -147,7 +153,9 @@ class OneOf(BaseAugmentation):
             total = sum(weights)
             self.weights = [w / total for w in weights]
 
-    def __call__(self, audio: Union[np.ndarray, Any], **kwargs) -> Union[np.ndarray, Any]:
+    def __call__(
+        self, audio: Union[np.ndarray, Any], **kwargs
+    ) -> Union[np.ndarray, Any]:
         """Apply one randomly selected augmentation.
 
         Args:
@@ -179,6 +187,7 @@ class OneOf(BaseAugmentation):
         return config
 
 
+@auementations_store(name="some_of", group="augmentation/composition")
 class SomeOf(BaseAugmentation):
     """Apply k randomly selected augmentations from a list.
 
@@ -258,7 +267,9 @@ class SomeOf(BaseAugmentation):
                     f"Expected {self.sample_rate}, got {aug.sample_rate}"
                 )
 
-    def __call__(self, audio: Union[np.ndarray, Any], **kwargs) -> Union[np.ndarray, Any]:
+    def __call__(
+        self, audio: Union[np.ndarray, Any], **kwargs
+    ) -> Union[np.ndarray, Any]:
         """Apply k randomly selected augmentations.
 
         Args:
@@ -298,7 +309,12 @@ class SomeOf(BaseAugmentation):
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
         config = super().to_config()
-        config["k"] = self.k_min if self.k_min == self.k_max else (self.k_min, self.k_max)
+        config["k"] = (
+            self.k_min if self.k_min == self.k_max else (self.k_min, self.k_max)
+        )
         config["augmentations"] = [aug.to_config() for aug in self.augmentations]
         config["replace"] = self.replace
         return config
+
+
+__all__ = ["Compose", "OneOf", "SomeOf"]

@@ -1,13 +1,13 @@
 """Hydra configuration support for Auementations."""
 
-from auementations.config.store import auementations_store
-from auementations.config.structured import (
-    build_augmentation_config,
-    register_auementations_configs,
-)
+from auementations.config import config_store
+from auementations.config.config_store import auementations_store
+
+# Import modules to trigger decorator registration
+# This ensures all augmentation configs are registered in the store
+from auementations.core import composition  # noqa: F401
 
 __all__ = [
+    "config_store",
     "auementations_store",
-    "build_augmentation_config",
-    "register_auementations_configs",
 ]

@@ -1,8 +1,10 @@
 """Adapters for torch_audiomentations library."""
 
 from typing import Any, Dict, Optional, Union
+
 import numpy as np
 
+from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
 from auementations.core.parameters import ParameterSampler, ParameterValue
 
@@ -12,6 +14,7 @@ def _lazy_import_torch_audiomentations():
     try:
         import torch
         import torch_audiomentations
+
         return torch, torch_audiomentations
     except ImportError as e:
         raise ImportError(
@@ -36,7 +39,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
         sample_rate: int,
         p: float = 1.0,
         seed: Optional[int] = None,
-        **params
+        **params,
     ):
         """Initialize adapter.
 
@@ -66,7 +69,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
         self.transform = self.transform_class(
             sample_rate=self.sample_rate,
             p=1.0,  # We handle probability at our level
-            **self.current_params
+            **self.current_params,
         )
 
     def randomize_parameters(self) -> None:
@@ -80,9 +83,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
                 self.current_params[key] = value
 
     def __call__(
-        self,
-        audio: Union[np.ndarray, Any],
-        **kwargs
+        self, audio: Union[np.ndarray, Any], **kwargs
     ) -> Union[np.ndarray, Any]:
         """Apply augmentation.
 
@@ -130,13 +131,17 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
         config = super().to_config()
-        config["transform_class"] = f"{self.transform_class.__module__}.{self.transform_class.__name__}"
+        config["transform_class"] = (
+            f"{self.transform_class.__module__}.{self.transform_class.__name__}"
+        )
         config.update(self.param_specs)
         return config
 
 
 # Convenience wrappers for common torch_audiomentations transforms
 
+
+@auementations_store(name="gain", group="augmentation/torch_audiomentations")
 class Gain(TorchAudiomentationsAdapter):
     """Apply gain to audio.
 
@@ -166,6 +171,7 @@ class Gain(TorchAudiomentationsAdapter):
         )
 
 
+@auementations_store(name="pitch_shift", group="augmentation/torch_audiomentations")
 class PitchShift(TorchAudiomentationsAdapter):
     """Shift pitch of audio.
 
@@ -195,6 +201,9 @@ class PitchShift(TorchAudiomentationsAdapter):
         )
 
 
+@auementations_store(
+    name="add_colored_noise", group="augmentation/torch_audiomentations"
+)
 class AddColoredNoise(TorchAudiomentationsAdapter):
     """Add colored noise to audio.
 
@@ -230,6 +239,7 @@ class AddColoredNoise(TorchAudiomentationsAdapter):
         )
 
 
+@auementations_store(name="hpf", group="augmentation/torch_audiomentations")
 class HighPassFilter(TorchAudiomentationsAdapter):
     """Apply high-pass filter.
 
@@ -259,6 +269,7 @@ class HighPassFilter(TorchAudiomentationsAdapter):
         )
 
 
+@auementations_store(name="lpf", group="augmentation/torch_audiomentations")
 class LowPassFilter(TorchAudiomentationsAdapter):
     """Apply low-pass filter.
 
@@ -288,6 +299,7 @@ class LowPassFilter(TorchAudiomentationsAdapter):
         )
 
 
+@auementations_store(name="time_stretch", group="augmentation/torch_audiomentations")
 class TimeStretch(TorchAudiomentationsAdapter):
     """Stretch audio in time without changing pitch.
 
@@ -315,3 +327,13 @@ class TimeStretch(TorchAudiomentationsAdapter):
             min_rate=min_rate,
             max_rate=max_rate,
         )
+
+
+__all__ = [
+    "Gain",
+    "PitchShift",
+    "AddColoredNoise",
+    "HighPassFilter",
+    "LowPassFilter",
+    "TimeStretch",
+]

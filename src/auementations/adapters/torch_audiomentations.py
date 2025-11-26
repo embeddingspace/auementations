@@ -141,7 +141,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
 # Convenience wrappers for common torch_audiomentations transforms
 
 
-@auementations_store(name="gain", group="augmentation/torch_audiomentations")
+@auementations_store(name="gain", group="torch_audiomentations")
 class Gain(TorchAudiomentationsAdapter):
     """Apply gain to audio.
 
@@ -171,7 +171,7 @@ class Gain(TorchAudiomentationsAdapter):
         )
 
 
-@auementations_store(name="pitch_shift", group="augmentation/torch_audiomentations")
+@auementations_store(name="pitch_shift", group="torch_audiomentations")
 class PitchShift(TorchAudiomentationsAdapter):
     """Shift pitch of audio.
 
@@ -201,9 +201,7 @@ class PitchShift(TorchAudiomentationsAdapter):
         )
 
 
-@auementations_store(
-    name="add_colored_noise", group="augmentation/torch_audiomentations"
-)
+@auementations_store(name="add_colored_noise", group="torch_audiomentations")
 class AddColoredNoise(TorchAudiomentationsAdapter):
     """Add colored noise to audio.
 
@@ -239,7 +237,7 @@ class AddColoredNoise(TorchAudiomentationsAdapter):
         )
 
 
-@auementations_store(name="hpf", group="augmentation/torch_audiomentations")
+@auementations_store(name="hpf", group="torch_audiomentations")
 class HighPassFilter(TorchAudiomentationsAdapter):
     """Apply high-pass filter.
 
@@ -269,7 +267,7 @@ class HighPassFilter(TorchAudiomentationsAdapter):
         )
 
 
-@auementations_store(name="lpf", group="augmentation/torch_audiomentations")
+@auementations_store(name="lpf", group="torch_audiomentations")
 class LowPassFilter(TorchAudiomentationsAdapter):
     """Apply low-pass filter.
 
@@ -299,7 +297,7 @@ class LowPassFilter(TorchAudiomentationsAdapter):
         )
 
 
-@auementations_store(name="time_stretch", group="augmentation/torch_audiomentations")
+@auementations_store(name="time_stretch", group="torch_audiomentations")
 class TimeStretch(TorchAudiomentationsAdapter):
     """Stretch audio in time without changing pitch.
 

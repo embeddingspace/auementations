@@ -29,14 +29,14 @@ class TestRealisticOneOfComposition:
         sample_rate = 16000
 
         # Get the registered configs from the store
-        lpf_config = auementations_store.get_entry(
-            group="augmentation/pedalboard", name="lpf"
-        )["node"]
-        hpf_config = auementations_store.get_entry(
-            group="augmentation/pedalboard", name="hpf"
-        )["node"]
+        lpf_config = auementations_store.get_entry(group="pedalboard", name="lpf")[
+            "node"
+        ]
+        hpf_config = auementations_store.get_entry(group="pedalboard", name="hpf")[
+            "node"
+        ]
         one_of_config = auementations_store.get_entry(
-            group="augmentation/composition", name="one_of"
+            group="composition", name="one_of"
         )["node"]
 
         # Build a complete config for OneOf composition
@@ -81,14 +81,14 @@ class TestRealisticOneOfComposition:
         # GIVEN: A OneOf composition with distinct filters
         sample_rate = 16000
 
-        lpf_config = auementations_store.get_entry(
-            group="augmentation/pedalboard", name="lpf"
-        )["node"]
-        hpf_config = auementations_store.get_entry(
-            group="augmentation/pedalboard", name="hpf"
-        )["node"]
+        lpf_config = auementations_store.get_entry(group="pedalboard", name="lpf")[
+            "node"
+        ]
+        hpf_config = auementations_store.get_entry(group="pedalboard", name="hpf")[
+            "node"
+        ]
         one_of_config = auementations_store.get_entry(
-            group="augmentation/composition", name="one_of"
+            group="composition", name="one_of"
         )["node"]
 
         composition_config = builds(
@@ -137,14 +137,14 @@ class TestRealisticOneOfComposition:
         # GIVEN: A OneOf composition where filters have parameter ranges
         sample_rate = 16000
 
-        lpf_config = auementations_store.get_entry(
-            group="augmentation/pedalboard", name="lpf"
-        )["node"]
-        hpf_config = auementations_store.get_entry(
-            group="augmentation/pedalboard", name="hpf"
-        )["node"]
+        lpf_config = auementations_store.get_entry(group="pedalboard", name="lpf")[
+            "node"
+        ]
+        hpf_config = auementations_store.get_entry(group="pedalboard", name="hpf")[
+            "node"
+        ]
         one_of_config = auementations_store.get_entry(
-            group="augmentation/composition", name="one_of"
+            group="composition", name="one_of"
         )["node"]
 
         composition_config = builds(
@@ -190,7 +190,9 @@ class TestRealisticOneOfComposition:
                 unique_results.append(result)
 
         # Should have multiple unique results due to randomness
-        assert len(unique_results) > 1, "No variation in results despite range parameters"
+        assert len(unique_results) > 1, (
+            "No variation in results despite range parameters"
+        )
 
     def test_given_dict_config_when_instantiated_then_creates_working_augmentation(
         self, mono_audio

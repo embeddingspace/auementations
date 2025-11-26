@@ -96,6 +96,7 @@ class PedalboardAdapter(BaseAugmentation):
         was_torch = False
         try:
             import torch
+
             was_torch = isinstance(audio, torch.Tensor)
             if was_torch:
                 original_device = audio.device
@@ -137,6 +138,7 @@ class PedalboardAdapter(BaseAugmentation):
         # Convert back to torch tensor if needed
         if was_torch:
             import torch
+
             augmented = torch.from_numpy(augmented).to(original_device)
 
         return augmented
@@ -154,7 +156,7 @@ class PedalboardAdapter(BaseAugmentation):
 # Convenience wrappers for common pedalboard effects
 
 
-@auementations_store(name="lpf", group="augmentation/pedalboard")
+@auementations_store(name="lpf", group="pedalboard")
 class LowPassFilter(PedalboardAdapter):
     """Apply low-pass filter.
 
@@ -195,7 +197,7 @@ class LowPassFilter(PedalboardAdapter):
         )
 
 
-@auementations_store(name="hpf", group="augmentation/pedalboard")
+@auementations_store(name="hpf", group="pedalboard")
 class HighPassFilter(PedalboardAdapter):
     """Apply high-pass filter.
 

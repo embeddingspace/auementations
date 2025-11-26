@@ -1,6 +1,6 @@
 [project]
 name = "auementations"
-version = "0.1.0"
+version = "0.2.0"
 description = "A composable audio augmentation library with Hydra configuration support"
 readme = "README.md"
 authors = [
@@ -43,6 +43,14 @@ test = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/auementations"]
 
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "semver2"
+version_provider = "uv"
+update_changelog_on_bump = true
+major_version_zero = true
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

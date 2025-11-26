@@ -82,19 +82,30 @@ class PedalboardAdapter(BaseAugmentation):
         """Apply augmentation.
 
         Args:
-            audio: Input audio as numpy array.
+            audio: Input audio as numpy array or torch tensor.
                    Shape: (channels, samples) or (samples,)
             **kwargs: Additional parameters.
 
         Returns:
-            Augmented audio as numpy array.
+            Augmented audio in same format as input.
         """
         if not self.should_apply():
             return audio
 
+        # Check if input is torch tensor and convert to numpy
+        was_torch = False
+        try:
+            import torch
+            was_torch = isinstance(audio, torch.Tensor)
+            if was_torch:
+                original_device = audio.device
+                audio = audio.cpu().numpy()
+        except ImportError:
+            pass  # torch not available
+
         # Ensure we have numpy array
         if not isinstance(audio, np.ndarray):
-            raise TypeError(f"Expected numpy array, got {type(audio)}")
+            raise TypeError(f"Expected numpy array or torch.Tensor, got {type(audio)}")
 
         # Pedalboard expects float32 or float64
         original_dtype = audio.dtype
@@ -122,6 +133,11 @@ class PedalboardAdapter(BaseAugmentation):
         # Restore original dtype if needed
         if augmented.dtype != original_dtype:
             augmented = augmented.astype(original_dtype)
+
+        # Convert back to torch tensor if needed
+        if was_torch:
+            import torch
+            augmented = torch.from_numpy(augmented).to(original_device)
 
         return augmented
 

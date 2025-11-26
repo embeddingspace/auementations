@@ -35,6 +35,7 @@ uv sync
 ```python
 from auementations.adapters.torch_audiomentations import Gain, PitchShift
 from auementations.core.composition import Compose
+import numpy as np
 
 # Create augmentation pipeline
 augment = Compose([
@@ -52,8 +53,9 @@ augment = Compose([
     )
 ])
 
-# Apply to audio
-augmented = augment(audio_tensor)
+# Apply to audio (numpy array or torch tensor)
+audio = np.random.randn(16000).astype(np.float32)  # 1 second of audio
+augmented = augment(audio)
 ```
 
 ### Probabilistic Parameters
@@ -61,14 +63,21 @@ augmented = augment(audio_tensor)
 Parameters can be specified as ranges for random sampling:
 
 ```python
-from auementations.adapters.pedalboard import Reverb
+from auementations.adapters.pedalboard import LowPassFilter
 
 # Range-based sampling (uniform distribution)
-reverb = Reverb(
+lpf = LowPassFilter(
     sample_rate=44100,
-    room_size=(0.1, 0.9),      # Randomly sampled each call
-    wet_level=(0.1, 0.5),       # Randomly sampled each call
-    p=0.7                       # 70% chance to apply
+    min_cutoff_freq=500.0,     # Randomly sampled each call
+    max_cutoff_freq=5000.0,    # Randomly sampled each call
+    p=0.7                      # 70% chance to apply
+)
+
+# Or use fixed parameter
+lpf_fixed = LowPassFilter(
+    sample_rate=44100,
+    cutoff_freq=1000.0,  # Always 1000 Hz
+    p=1.0
 )
 ```
 
@@ -92,7 +101,7 @@ some_of = SomeOf(
         Gain(sample_rate=16000, min_gain_db=-6, max_gain_db=6),
         HighPassFilter(sample_rate=16000, min_cutoff_freq=20, max_cutoff_freq=400),
         LowPassFilter(sample_rate=16000, min_cutoff_freq=4000, max_cutoff_freq=8000),
-        AddBackgroundNoise(sample_rate=16000, min_snr_db=3, max_snr_db=30)
+        AddColoredNoise(sample_rate=16000, min_snr_db=3, max_snr_db=30)
     ]
 )
 
@@ -100,42 +109,92 @@ some_of = SomeOf(
 pipeline = Compose([one_of, some_of])
 ```
 
+### Available Backends
+
+**torch_audiomentations**: GPU-accelerated augmentations
+- `Gain`: Adjust volume
+- `PitchShift`: Shift pitch up/down
+- `TimeStretch`: Change speed without affecting pitch
+- `AddColoredNoise`: Add white/pink/brown noise
+- `HighPassFilter`: Remove low frequencies
+- `LowPassFilter`: Remove high frequencies
+
+**pedalboard**: High-quality audio effects from Spotify
+- `LowPassFilter`: Remove high frequencies
+- `HighPassFilter`: Remove low frequencies
+- More effects coming soon!
+
 ### Hydra Configuration
 
-```yaml
-# config/augmentation/train_pipeline.yaml
-_target_: auementations.core.composition.Compose
-augmentations:
-  - _target_: auementations.adapters.torch_audiomentations.Gain
-    sample_rate: ${data.sample_rate}
-    min_gain_db: -12.0
-    max_gain_db: 12.0
-    p: 0.5
-
-  - _target_: auementations.core.composition.OneOf
-    augmentations:
-      - _target_: auementations.adapters.torch_audiomentations.PitchShift
-        sample_rate: ${data.sample_rate}
-        min_semitones: -4
-        max_semitones: 4
-
-      - _target_: auementations.adapters.pedalboard.Reverb
-        sample_rate: ${data.sample_rate}
-        room_size: [0.1, 0.9]
-        wet_level: [0.1, 0.5]
-```
+Auementations provides first-class Hydra integration via hydra-zen:
 
 ```python
-# In your training code
-from hydra import compose, initialize
-from hydra.utils import instantiate
+from hydra_zen import builds, instantiate
+from auementations.config.config_store import auementations_store
+from auementations.core.composition import OneOf
 
-with initialize(config_path="config"):
-    cfg = compose(config_name="train")
-    augmentation = instantiate(cfg.augmentation)
+# Get configs from the centralized store
+lpf_config = auementations_store.get_entry(
+    group="augmentation/pedalboard", name="lpf"
+)["node"]
+hpf_config = auementations_store.get_entry(
+    group="augmentation/pedalboard", name="hpf"
+)["node"]
+one_of_config = auementations_store.get_entry(
+    group="augmentation/composition", name="one_of"
+)["node"]
 
-    # Use in training loop
-    augmented_audio = augmentation(audio, sample_rate=cfg.data.sample_rate)
+# Build a structured config
+composition_config = builds(
+    one_of_config,
+    augmentations=[
+        builds(
+            lpf_config,
+            sample_rate=16000,
+            min_cutoff_freq=500.0,
+            max_cutoff_freq=2000.0,
+        ),
+        builds(
+            hpf_config,
+            sample_rate=16000,
+            min_cutoff_freq=100.0,
+            max_cutoff_freq=500.0,
+        ),
+    ],
+    sample_rate=16000,
+    p=1.0,
+)
+
+# Instantiate and use
+augmentation = instantiate(composition_config)
+augmented = augmentation(audio)
+```
+
+Or use dictionary-based configs (like from YAML):
+
+```python
+from hydra_zen import instantiate
+
+config_dict = {
+    "_target_": "auementations.core.composition.OneOf",
+    "augmentations": [
+        {
+            "_target_": "auementations.adapters.pedalboard.LowPassFilter",
+            "sample_rate": 16000,
+            "min_cutoff_freq": 500.0,
+            "max_cutoff_freq": 2000.0,
+        },
+        {
+            "_target_": "auementations.adapters.torch_audiomentations.Gain",
+            "sample_rate": 16000,
+            "min_gain_db": -12.0,
+            "max_gain_db": 12.0,
+        },
+    ],
+    "sample_rate": 16000,
+}
+
+augmentation = instantiate(config_dict)
 ```
 
 ### Multi-Backend Usage
@@ -144,15 +203,17 @@ Mix and match augmentations from different backends:
 
 ```python
 from auementations.adapters.torch_audiomentations import Gain, AddColoredNoise
-from auementations.adapters.pedalboard import Reverb, Chorus
-from auementations.core.composition import Compose
+from auementations.adapters.pedalboard import LowPassFilter, HighPassFilter
+from auementations.core.composition import Compose, OneOf
 
 # Combine torch_audiomentations and pedalboard
 pipeline = Compose([
     Gain(sample_rate=44100, min_gain_db=-6, max_gain_db=6, p=0.5),
-    Reverb(sample_rate=44100, room_size=(0.2, 0.8), p=0.3),
+    OneOf([
+        LowPassFilter(sample_rate=44100, min_cutoff_freq=500, max_cutoff_freq=5000),
+        HighPassFilter(sample_rate=44100, min_cutoff_freq=100, max_cutoff_freq=1000),
+    ], p=0.7),
     AddColoredNoise(sample_rate=44100, min_snr_db=10, max_snr_db=30, p=0.4),
-    Chorus(sample_rate=44100, rate_hz=(0.5, 2.0), p=0.2)
 ])
 ```
 
@@ -197,11 +258,13 @@ uv run mypy auementations
 
 Contributions welcome! To add a new backend:
 
-1. Create adapter in `auem/adapters/your_backend.py`
-2. Inherit from `BaseAugmentation`
-3. Implement required methods
-4. Add tests in `tests/adapters/test_your_backend.py`
-5. Add structured configs in `auem/config/structured.py`
+1. **Write tests first** (TDD): Create `tests/adapters/test_your_backend.py` following BDD Given-When-Then pattern
+2. **Create adapter**: Implement in `auementations/adapters/your_backend.py`, inheriting from `BaseAugmentation`
+3. **Register configs**: Use `@auementations_store` decorator to register with the centralized store
+4. **Export classes**: Add to `auementations/adapters/__init__.py`
+5. **Update config store**: Import in `auementations/config/config_store.py`
+
+See `auementations/adapters/pedalboard.py` and `tests/adapters/test_pedalboard.py` for reference implementation.
 
 ## License
 

@@ -27,7 +27,7 @@ uv pip install -e ".[dev,test,all]"
 uv run pytest
 
 # Run tests with coverage
-uv run pytest --cov=auem --cov-report=html
+uv run pytest --cov=auementations --cov-report=html
 
 # Run specific test file
 uv run pytest tests/test_composition.py
@@ -51,7 +51,7 @@ uv run ruff check .
 uv run ruff check --fix .
 
 # Type check with mypy
-uv run mypy auem
+uv run mypy src/auementations
 ```
 
 ## Architecture
@@ -66,31 +66,26 @@ uv run mypy auem
 
 ### Directory Structure
 
-- `auem/core/`: Base abstractions and interfaces
+- `src/auementations/core/`: Base abstractions and interfaces
   - `base.py`: Abstract base class for all augmentations
   - `composition.py`: Compose, OneOf, SomeOf composition classes
   - `parameters.py`: Parameter sampling utilities (range handling, probability distributions)
 
-- `auem/adapters/`: Backend-specific wrappers
+- `src/auementations/adapters/`: Backend-specific wrappers
   - `torch_audiomentations.py`: Wraps torch_audiomentations transforms
   - `pedalboard.py`: Wraps Spotify's pedalboard effects
   - Each adapter implements the common `BaseAugmentation` interface
 
-- `auem/config/`: Hydra configuration support
-  - `store.py`: Centralized hydra-zen ZenStore with all augmentation configs
-  - `structured.py`: Hydra-zen structured config utilities
-  - `schemas.py`: Dataclasses and validation schemas (future)
+- `src/auementations/config/`: Hydra configuration support
+  - `config_store.py`: Centralized hydra-zen ZenStore with all augmentation configs (uses decorator pattern)
 
-- `auem/utils/`: Shared utilities
-  - `audio.py`: Audio I/O and manipulation helpers
-  - `validation.py`: Input validation and type checking
-
-- `examples/`: Usage demonstrations
-  - `basic_usage.py`: Simple augmentation examples
-  - `hydra_config/`: Example Hydra config YAML files
-  - `training_pipeline.py`: Integration with ML training loop
+- `src/auementations/utils/`: Shared utilities
+  - Future utilities for audio I/O and validation
 
 - `tests/`: Test suite organized to mirror source structure
+  - `tests/core/`: Core functionality tests
+  - `tests/adapters/`: Backend adapter tests
+  - `tests/config/`: Configuration tests
 
 ### Key Abstractions
 

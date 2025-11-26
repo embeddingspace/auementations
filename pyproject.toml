@@ -41,11 +41,14 @@ test = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["auementations"]
+packages = ["src/auementations"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build]
+directory = "src"
 
 [dependency-groups]
 dev = [

@@ -35,7 +35,7 @@ class PedalboardAdapter(BaseAugmentation):
     def __init__(
         self,
         effect_class: Any,
-        sample_rate: int,
+        sample_rate: int | float,
         p: float = 1.0,
         seed: Optional[int] = None,
         **params,
@@ -170,7 +170,7 @@ class LowPassFilter(PedalboardAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         cutoff_freq: Optional[float] = None,
         min_cutoff_freq: Optional[float] = None,
         max_cutoff_freq: Optional[float] = None,
@@ -211,7 +211,7 @@ class HighPassFilter(PedalboardAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         cutoff_freq: Optional[float] = None,
         min_cutoff_freq: Optional[float] = None,
         max_cutoff_freq: Optional[float] = None,

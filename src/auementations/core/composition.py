@@ -33,7 +33,7 @@ class Compose(BaseAugmentation):
     def __init__(
         self,
         augmentations: Union[List[BaseAugmentation], Dict[str, BaseAugmentation]],
-        sample_rate: Optional[int] = None,
+        sample_rate: int | float | None = None,
         p: float = 1.0,
         seed: Optional[int] = None,
     ):
@@ -143,7 +143,7 @@ class OneOf(BaseAugmentation):
         self,
         augmentations: Union[List[BaseAugmentation], Dict[str, BaseAugmentation]],
         weights: Optional[Union[List[float], Dict[str, float]]] = None,
-        sample_rate: Optional[int] = None,
+        sample_rate: int | float | None = None,
         p: float = 1.0,
         seed: Optional[int] = None,
     ):
@@ -275,7 +275,7 @@ class SomeOf(BaseAugmentation):
         k: Union[int, tuple],
         augmentations: Union[List[BaseAugmentation], Dict[str, BaseAugmentation]],
         replace: bool = False,
-        sample_rate: Optional[int] = None,
+        sample_rate: int | float | None = None,
         p: float = 1.0,
         seed: Optional[int] = None,
     ):

@@ -154,7 +154,7 @@ class Gain(TorchAudiomentationsAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         min_gain_db: float = -12.0,
         max_gain_db: float = 12.0,
         p: float = 1.0,
@@ -184,7 +184,7 @@ class PitchShift(TorchAudiomentationsAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         min_semitones: float = -4.0,
         max_semitones: float = 4.0,
         p: float = 1.0,
@@ -216,7 +216,7 @@ class AddColoredNoise(TorchAudiomentationsAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         min_snr_db: float = 3.0,
         max_snr_db: float = 30.0,
         min_f_decay: float = -2.0,
@@ -250,7 +250,7 @@ class HighPassFilter(TorchAudiomentationsAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         min_cutoff_freq: float = 20.0,
         max_cutoff_freq: float = 2400.0,
         p: float = 1.0,
@@ -280,7 +280,7 @@ class LowPassFilter(TorchAudiomentationsAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         min_cutoff_freq: float = 150.0,
         max_cutoff_freq: float = 7500.0,
         p: float = 1.0,
@@ -310,7 +310,7 @@ class TimeStretch(TorchAudiomentationsAdapter):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         min_rate: float = 0.8,
         max_rate: float = 1.25,
         p: float = 1.0,

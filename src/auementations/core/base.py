@@ -21,7 +21,7 @@ class BaseAugmentation(ABC):
 
     def __init__(
         self,
-        sample_rate: int,
+        sample_rate: int | float,
         p: float = 1.0,
         seed: Optional[int] = None,
     ):
@@ -32,8 +32,10 @@ class BaseAugmentation(ABC):
             p: Probability of applying this augmentation (0.0 to 1.0).
             seed: Random seed for reproducibility. If None, uses global random state.
         """
-        if not isinstance(sample_rate, int) or sample_rate <= 0:
-            raise ValueError(f"sample_rate must be a positive integer, got {sample_rate}")
+        if not isinstance(sample_rate, (int, float)) or sample_rate <= 0:
+            raise ValueError(
+                f"sample_rate must be a positive integer, got {sample_rate}"
+            )
 
         if not 0.0 <= p <= 1.0:
             raise ValueError(f"p must be between 0.0 and 1.0, got {p}")
@@ -47,9 +49,7 @@ class BaseAugmentation(ABC):
 
     @abstractmethod
     def __call__(
-        self,
-        audio: Union[np.ndarray, Any],
-        **kwargs
+        self, audio: Union[np.ndarray, Any], **kwargs
     ) -> Union[np.ndarray, Any]:
         """Apply augmentation to audio.
 
@@ -97,5 +97,7 @@ class BaseAugmentation(ABC):
 
     def __repr__(self) -> str:
         """String representation of augmentation."""
-        params = ", ".join(f"{k}={v}" for k, v in self.to_config().items() if k != "_target_")
+        params = ", ".join(
+            f"{k}={v}" for k, v in self.to_config().items() if k != "_target_"
+        )
         return f"{self.__class__.__name__}({params})"

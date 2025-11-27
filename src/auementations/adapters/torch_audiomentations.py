@@ -36,7 +36,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
     def __init__(
         self,
         transform_class: Any,
-        sample_rate: int,
+        sample_rate: int | float,
         p: float = 1.0,
         seed: Optional[int] = None,
         **params,

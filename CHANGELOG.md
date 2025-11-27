@@ -1,3 +1,9 @@
+## 0.2.1 (2025-11-26)
+
+### Fix
+
+- allow samplerate to be float
+
 ## 0.2.0 (2025-11-26)
 
 ### Feat

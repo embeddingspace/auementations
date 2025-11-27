@@ -176,21 +176,6 @@ class TestOneOfWithDict:
         # THEN: High probability augmentation selected more often
         assert high_count > low_count
 
-    def test_given_dict_weights_with_list_augmentations_when_created_then_raises_error(
-        self,
-    ):
-        """Given dict weights with list augmentations, when created, then raises error."""
-        # GIVEN: List augmentations with dict weights
-        augmentations = [
-            MockAugmentation(sample_rate=16000, gain=2.0),
-            MockAugmentation(sample_rate=16000, gain=3.0),
-        ]
-        weights = {"first": 0.5, "second": 0.5}
-
-        # WHEN/THEN: Creating OneOf raises ValueError
-        with pytest.raises(ValueError, match="Cannot use dict weights"):
-            OneOf(augmentations=augmentations, weights=weights)
-
     def test_given_dict_with_mismatched_sample_rates_when_one_of_created_then_raises_error(
         self,
     ):
@@ -323,55 +308,3 @@ class TestSomeOfWithDict:
         # WHEN/THEN: Creating SomeOf raises ValueError
         with pytest.raises(ValueError, match="augmentations list cannot be empty"):
             SomeOf(k=1, augmentations=augmentations)
-
-
-class TestDictCompositionBackwardCompatibility:
-    """Test that dict-based composition is backward compatible with list-based."""
-
-    def test_given_list_augmentations_when_composed_then_still_works(self):
-        """Given list augmentations, when Compose created, then works as before."""
-        # GIVEN: A list of augmentations (old API)
-        augmentations = [
-            MockAugmentation(sample_rate=16000, gain=2.0),
-            MockAugmentation(sample_rate=16000, gain=3.0),
-        ]
-
-        # WHEN: Create Compose with list
-        compose = Compose(augmentations=augmentations)
-        audio = np.ones(100, dtype=np.float32)
-        result = compose(audio)
-
-        # THEN: Works correctly
-        assert compose.augmentation_names is None  # No names for list
-        assert np.allclose(result, audio * 2.0 * 3.0)
-
-    def test_given_list_augmentations_when_one_of_created_then_still_works(self):
-        """Given list augmentations, when OneOf created, then works as before."""
-        # GIVEN: A list of augmentations (old API)
-        augmentations = [
-            MockAugmentation(sample_rate=16000, gain=2.0),
-            MockAugmentation(sample_rate=16000, gain=3.0),
-        ]
-
-        # WHEN: Create OneOf with list
-        one_of = OneOf(augmentations=augmentations)
-
-        # THEN: Works correctly
-        assert one_of.augmentation_names is None  # No names for list
-        assert len(one_of.augmentations) == 2
-
-    def test_given_list_augmentations_when_some_of_created_then_still_works(self):
-        """Given list augmentations, when SomeOf created, then works as before."""
-        # GIVEN: A list of augmentations (old API)
-        augmentations = [
-            MockAugmentation(sample_rate=16000, gain=2.0),
-            MockAugmentation(sample_rate=16000, gain=3.0),
-            MockAugmentation(sample_rate=16000, gain=4.0),
-        ]
-
-        # WHEN: Create SomeOf with list
-        some_of = SomeOf(k=2, augmentations=augmentations)
-
-        # THEN: Works correctly
-        assert some_of.augmentation_names is None  # No names for list
-        assert len(some_of.augmentations) == 3

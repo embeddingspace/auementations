@@ -17,7 +17,7 @@ class TestComposeSequentialApplication:
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
-        compose = Compose([aug1, aug2])
+        compose = Compose({"a": aug1, "b": aug2})
 
         original = mono_audio.copy()
 
@@ -35,14 +35,16 @@ class TestComposeSequentialApplication:
         with pytest.raises(ValueError, match="augmentations list cannot be empty"):
             Compose([])
 
-    def test_given_augmentations_when_composed_then_infers_sample_rate(self, sample_rate):
+    def test_given_augmentations_when_composed_then_infers_sample_rate(
+        self, sample_rate
+    ):
         """Given augmentations, when composed without explicit sample_rate, then infers from first."""
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate)
         aug2 = MockAugmentation(sample_rate=sample_rate)
 
         # When
-        compose = Compose([aug1, aug2])
+        compose = Compose({"a": aug1, "b": aug2})
 
         # Then
         assert compose.sample_rate == sample_rate
@@ -55,7 +57,7 @@ class TestComposeSequentialApplication:
 
         # When / Then
         with pytest.raises(ValueError, match="must have same sample_rate"):
-            Compose([aug1, aug2])
+            Compose({"a": aug1, "b": aug2})
 
     def test_given_compose_with_probability_when_not_applied_then_returns_original(
         self, mono_audio, sample_rate
@@ -64,7 +66,7 @@ class TestComposeSequentialApplication:
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
-        compose = Compose([aug1, aug2], p=0.0)
+        compose = Compose({"a": aug1, "b": aug2}, p=0.0)
 
         original = mono_audio.copy()
 
@@ -81,7 +83,7 @@ class TestComposeSequentialApplication:
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
-        compose = Compose([aug1, aug2])
+        compose = Compose({"a": aug1, "b": aug2})
 
         # When
         config = compose.to_config()
@@ -92,12 +94,14 @@ class TestComposeSequentialApplication:
         assert config["augmentations"][0]["gain"] == 2.0
         assert config["augmentations"][1]["gain"] == 3.0
 
-    def test_given_compose_when_repr_called_then_shows_all_augmentations(self, sample_rate):
+    def test_given_compose_when_repr_called_then_shows_all_augmentations(
+        self, sample_rate
+    ):
         """Given a Compose, when repr is called, then shows all augmentations."""
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
-        compose = Compose([aug1, aug2])
+        compose = Compose({"a": aug1, "b": aug2})
 
         # When
         repr_str = repr(compose)
@@ -119,7 +123,7 @@ class TestOneOfRandomSelection:
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0, p=1.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0, p=1.0)
         aug3 = MockAugmentation(sample_rate=sample_rate, gain=4.0, p=1.0)
-        one_of = OneOf([aug1, aug2, aug3])
+        one_of = OneOf({"a": aug1, "b": aug2, "c": aug3})
 
         # When
         result = one_of(mono_audio)
@@ -144,7 +148,7 @@ class TestOneOfRandomSelection:
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
         # Give aug1 3x the weight of aug2
-        one_of = OneOf([aug1, aug2], weights=[0.75, 0.25])
+        one_of = OneOf({"a": aug1, "b": aug2}, weights=[0.75, 0.25])
 
         n_trials = 1000
         aug1_count = 0
@@ -169,20 +173,26 @@ class TestOneOfRandomSelection:
 
         # When / Then
         with pytest.raises(ValueError, match="Number of weights.*must match"):
-            OneOf([aug1, aug2], weights=[0.5, 0.3, 0.2])  # 3 weights for 2 augmentations
+            OneOf(
+                {"a": aug1, "b": aug2}, weights=[0.5, 0.3, 0.2]
+            )  # 3 weights for 2 augmentations
 
-    def test_given_empty_augmentation_list_when_one_of_initialized_then_raises_error(self):
+    def test_given_empty_augmentation_list_when_one_of_initialized_then_raises_error(
+        self,
+    ):
         """Given empty augmentation list, when OneOf initialized, then raises ValueError."""
         # Given / When / Then
         with pytest.raises(ValueError, match="augmentations list cannot be empty"):
-            OneOf([])
+            OneOf({})
 
-    def test_given_one_of_when_exported_to_config_then_includes_weights(self, sample_rate):
+    def test_given_one_of_when_exported_to_config_then_includes_weights(
+        self, sample_rate
+    ):
         """Given a OneOf with weights, when exported to config, then includes weights."""
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate)
         aug2 = MockAugmentation(sample_rate=sample_rate)
-        one_of = OneOf([aug1, aug2], weights=[0.7, 0.3])
+        one_of = OneOf({"a": aug1, "b": aug2}, weights=[0.7, 0.3])
 
         # When
         config = one_of.to_config()
@@ -206,7 +216,9 @@ class TestSomeOfRandomSelection:
         aug3 = MockAugmentation(sample_rate=sample_rate, gain=1.2)
         aug4 = MockAugmentation(sample_rate=sample_rate, gain=1.1)
 
-        some_of = SomeOf(k=2, augmentations=[aug1, aug2, aug3, aug4])
+        some_of = SomeOf(
+            k=2, augmentations={"a": aug1, "b": aug2, "c": aug3, "d": aug4}
+        )
 
         # When
         result = some_of(mono_audio)
@@ -222,18 +234,18 @@ class TestSomeOfRandomSelection:
         """Given k as range, when SomeOf applied, then applies k augmentations within range."""
         # Given
         np.random.seed(42)
-        augmentations = [
-            MockAugmentation(sample_rate=sample_rate, gain=1.1),
-            MockAugmentation(sample_rate=sample_rate, gain=1.2),
-            MockAugmentation(sample_rate=sample_rate, gain=1.3),
-            MockAugmentation(sample_rate=sample_rate, gain=1.4),
-        ]
+        augmentations = {
+            "a": MockAugmentation(sample_rate=sample_rate, gain=1.1),
+            "b": MockAugmentation(sample_rate=sample_rate, gain=1.2),
+            "c": MockAugmentation(sample_rate=sample_rate, gain=1.3),
+            "d": MockAugmentation(sample_rate=sample_rate, gain=1.4),
+        }
 
         some_of = SomeOf(k=(1, 3), augmentations=augmentations)
 
         # When - apply multiple times and check apply counts
-        for aug in augmentations:
-            aug.apply_count = 0
+        for aug_k in augmentations:
+            augmentations[aug_k].apply_count = 0
 
         n_trials = 100
         for _ in range(n_trials):
@@ -241,7 +253,9 @@ class TestSomeOfRandomSelection:
 
         # Then
         # Total applications should be between 100 and 300 (1-3 per trial)
-        total_applications = sum(aug.apply_count for aug in augmentations)
+        total_applications = sum(
+            augmentations[aug_k].apply_count for aug_k in augmentations
+        )
         assert 100 <= total_applications <= 300
 
     def test_given_k_equals_zero_when_some_of_applied_then_returns_original(
@@ -251,7 +265,7 @@ class TestSomeOfRandomSelection:
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
-        some_of = SomeOf(k=0, augmentations=[aug1, aug2])
+        some_of = SomeOf(k=0, augmentations={"a": aug1, "b": aug2})
 
         original = mono_audio.copy()
 
@@ -269,7 +283,7 @@ class TestSomeOfRandomSelection:
         np.random.seed(42)
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         # Only one augmentation, but k=3 with replacement
-        some_of = SomeOf(k=3, augmentations=[aug1], replace=True)
+        some_of = SomeOf(k=3, augmentations={"a": aug1}, replace=True)
 
         original = mono_audio.copy()
 
@@ -278,10 +292,12 @@ class TestSomeOfRandomSelection:
 
         # Then
         # Should apply aug1 three times: 2.0^3 = 8.0
-        expected = original * (2.0 ** 3)
+        expected = original * (2.0**3)
         assert np.allclose(result, expected)
 
-    def test_given_k_greater_than_n_when_some_of_initialized_then_raises_error(self, sample_rate):
+    def test_given_k_greater_than_n_when_some_of_initialized_then_raises_error(
+        self, sample_rate
+    ):
         """Given k > number of augmentations, when initialized without replace, then raises ValueError."""
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate)
@@ -289,7 +305,7 @@ class TestSomeOfRandomSelection:
 
         # When / Then
         with pytest.raises(ValueError, match="k must be between"):
-            SomeOf(k=3, augmentations=[aug1, aug2], replace=False)
+            SomeOf(k=3, augmentations={"a": aug1, "b": aug2}, replace=False)
 
     def test_given_some_of_when_exported_to_config_then_includes_k_and_replace(
         self, sample_rate
@@ -298,7 +314,7 @@ class TestSomeOfRandomSelection:
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate)
         aug2 = MockAugmentation(sample_rate=sample_rate)
-        some_of = SomeOf(k=2, augmentations=[aug1, aug2], replace=True)
+        some_of = SomeOf(k=2, augmentations={"a": aug1, "b": aug2}, replace=True)
 
         # When
         config = some_of.to_config()
@@ -307,12 +323,14 @@ class TestSomeOfRandomSelection:
         assert config["k"] == 2
         assert config["replace"] is True
 
-    def test_given_k_range_when_exported_to_config_then_includes_tuple(self, sample_rate):
+    def test_given_k_range_when_exported_to_config_then_includes_tuple(
+        self, sample_rate
+    ):
         """Given k as range, when exported to config, then includes tuple."""
         # Given
         aug1 = MockAugmentation(sample_rate=sample_rate)
         aug2 = MockAugmentation(sample_rate=sample_rate)
-        some_of = SomeOf(k=(1, 2), augmentations=[aug1, aug2])
+        some_of = SomeOf(k=(1, 2), augmentations={"a": aug1, "b": aug2})
 
         # When
         config = some_of.to_config()
@@ -334,9 +352,9 @@ class TestNestedComposition:
 
         one_of_aug1 = MockAugmentation(sample_rate=sample_rate, gain=1.5)
         one_of_aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
-        one_of = OneOf([one_of_aug1, one_of_aug2])
+        one_of = OneOf({"a": one_of_aug1, "b": one_of_aug2})
 
-        compose = Compose([fixed_aug, one_of])
+        compose = Compose({"a": fixed_aug, "b": one_of})
 
         original = mono_audio.copy()
 

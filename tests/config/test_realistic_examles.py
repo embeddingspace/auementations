@@ -43,20 +43,20 @@ class TestRealisticOneOfComposition:
         # This creates a structured config that can be instantiated by Hydra
         composition_config = builds(
             one_of_config,
-            augmentations=[
-                builds(
+            augmentations={
+                "lowpass": builds(
                     lpf_config,
                     sample_rate=sample_rate,
                     min_cutoff_freq=500.0,
                     max_cutoff_freq=2000.0,
                 ),
-                builds(
+                "highpass": builds(
                     hpf_config,
                     sample_rate=sample_rate,
                     min_cutoff_freq=100.0,
                     max_cutoff_freq=500.0,
                 ),
-            ],
+            },
             sample_rate=sample_rate,
             p=1.0,
         )
@@ -93,18 +93,18 @@ class TestRealisticOneOfComposition:
 
         composition_config = builds(
             one_of_config,
-            augmentations=[
-                builds(
+            augmentations={
+                "lowpass": builds(
                     lpf_config,
                     sample_rate=sample_rate,
                     cutoff_freq=800.0,  # Fixed LPF at 800Hz
                 ),
-                builds(
+                "highpass": builds(
                     hpf_config,
                     sample_rate=sample_rate,
                     cutoff_freq=3000.0,  # Fixed HPF at 3000Hz
                 ),
-            ],
+            },
             sample_rate=sample_rate,
             p=1.0,
             seed=None,  # No seed for true randomness
@@ -149,20 +149,20 @@ class TestRealisticOneOfComposition:
 
         composition_config = builds(
             one_of_config,
-            augmentations=[
-                builds(
+            augmentations={
+                "lowpass": builds(
                     lpf_config,
                     sample_rate=sample_rate,
                     min_cutoff_freq=500.0,
                     max_cutoff_freq=2000.0,
                 ),
-                builds(
+                "highpass": builds(
                     hpf_config,
                     sample_rate=sample_rate,
                     min_cutoff_freq=100.0,
                     max_cutoff_freq=1000.0,
                 ),
-            ],
+            },
             sample_rate=sample_rate,
             p=1.0,
         )
@@ -204,22 +204,22 @@ class TestRealisticOneOfComposition:
         # This mimics what you'd get from a Hydra YAML config file
         config_dict = {
             "_target_": "auementations.core.composition.OneOf",
-            "augmentations": [
-                {
+            "augmentations": {
+                "lowpass": {
                     "_target_": "auementations.adapters.pedalboard.LowPassFilter",
                     "sample_rate": sample_rate,
                     "min_cutoff_freq": 500.0,
                     "max_cutoff_freq": 2000.0,
                     "p": 1.0,
                 },
-                {
+                "highpass": {
                     "_target_": "auementations.adapters.pedalboard.HighPassFilter",
                     "sample_rate": sample_rate,
                     "min_cutoff_freq": 100.0,
                     "max_cutoff_freq": 500.0,
                     "p": 1.0,
                 },
-            ],
+            },
             "sample_rate": sample_rate,
             "p": 1.0,
         }

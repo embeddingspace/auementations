@@ -91,9 +91,9 @@ class TestStoreCompositionConfigs:
         # Create a config with actual augmentations
         config_dict = {
             "_target_": "auementations.core.composition.Compose",
-            "augmentations": [
-                MockAugmentation(sample_rate=sample_rate, gain=2.0),
-            ],
+            "augmentations": {
+                "mock": MockAugmentation(sample_rate=sample_rate, gain=2.0),
+            },
             "sample_rate": sample_rate,
             "p": 1.0,
         }

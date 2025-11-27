@@ -15,13 +15,6 @@ class Compose(BaseAugmentation):
     Applies multiple augmentations in sequence, passing the output of each
     augmentation as input to the next.
 
-    Example with list:
-        >>> compose = Compose([
-        ...     Gain(sample_rate=16000, min_gain_db=-6, max_gain_db=6),
-        ...     PitchShift(sample_rate=16000, min_semitones=-2, max_semitones=2),
-        ... ])
-        >>> augmented = compose(audio)
-
     Example with dict (better for structured configs):
         >>> compose = Compose({
         ...     "gain": Gain(sample_rate=16000, min_gain_db=-6, max_gain_db=6),
@@ -32,7 +25,7 @@ class Compose(BaseAugmentation):
 
     def __init__(
         self,
-        augmentations: Union[List[BaseAugmentation], Dict[str, BaseAugmentation]],
+        augmentations: dict[str, BaseAugmentation],
         sample_rate: int | float | None = None,
         p: float = 1.0,
         seed: Optional[int] = None,
@@ -50,15 +43,11 @@ class Compose(BaseAugmentation):
             raise ValueError("augmentations list cannot be empty")
 
         # Convert dict to list while preserving order and store names
-        if isinstance(augmentations, dict):
-            self.augmentation_names = list(augmentations.keys())
-            aug_list = list(augmentations.values())
-        else:
-            self.augmentation_names = None
-            aug_list = augmentations
+        self.augmentation_names = list(augmentations.keys())
+        aug_list = list(augmentations.values())
 
         # Infer sample_rate from first augmentation if not provided
-        if sample_rate is None:
+        if sample_rate is None and aug_list[0].sample_rate is not None:
             sample_rate = aug_list[0].sample_rate
 
         super().__init__(sample_rate=sample_rate, p=p, seed=seed)
@@ -74,9 +63,7 @@ class Compose(BaseAugmentation):
                     f"for augmentation '{name}' ({aug.__class__.__name__})"
                 )
 
-    def __call__(
-        self, audio: Union[np.ndarray, Any], **kwargs
-    ) -> Union[np.ndarray, Any]:
+    def __call__(self, audio: np.ndarray | Any, **kwargs) -> np.ndarray | Any:
         """Apply augmentations sequentially.
 
         Args:
@@ -124,13 +111,6 @@ class OneOf(BaseAugmentation):
     Useful for applying mutually exclusive augmentations, like different
     types of noise or different time-stretching factors.
 
-    Example with list:
-        >>> one_of = OneOf([
-        ...     Gain(sample_rate=16000, min_gain_db=-12, max_gain_db=0),
-        ...     Gain(sample_rate=16000, min_gain_db=0, max_gain_db=12),
-        ... ])
-        >>> augmented = one_of(audio)  # Applies exactly one
-
     Example with dict (better for structured configs):
         >>> one_of = OneOf({
         ...     "attenuate": Gain(sample_rate=16000, min_gain_db=-12, max_gain_db=0),
@@ -141,7 +121,7 @@ class OneOf(BaseAugmentation):
 
     def __init__(
         self,
-        augmentations: Union[List[BaseAugmentation], Dict[str, BaseAugmentation]],
+        augmentations: dict[str, BaseAugmentation],
         weights: Optional[Union[List[float], Dict[str, float]]] = None,
         sample_rate: int | float | None = None,
         p: float = 1.0,
@@ -162,14 +142,10 @@ class OneOf(BaseAugmentation):
             raise ValueError("augmentations list cannot be empty")
 
         # Convert dict to list while preserving order and store names
-        if isinstance(augmentations, dict):
-            self.augmentation_names = list(augmentations.keys())
-            aug_list = list(augmentations.values())
-        else:
-            self.augmentation_names = None
-            aug_list = augmentations
+        self.augmentation_names = list(augmentations.keys())
+        aug_list = list(augmentations.values())
 
-        if sample_rate is None:
+        if sample_rate is None and aug_list[0].sample_rate is not None:
             sample_rate = aug_list[0].sample_rate
 
         super().__init__(sample_rate=sample_rate, p=p, seed=seed)
@@ -247,17 +223,6 @@ class SomeOf(BaseAugmentation):
 
     This allows applying multiple random augmentations without applying all of them.
 
-    Example with list:
-        >>> some_of = SomeOf(
-        ...     k=2,
-        ...     augmentations=[
-        ...         Gain(sample_rate=16000, min_gain_db=-6, max_gain_db=6),
-        ...         HighPassFilter(sample_rate=16000, min_cutoff_freq=20, max_cutoff_freq=400),
-        ...         LowPassFilter(sample_rate=16000, min_cutoff_freq=4000, max_cutoff_freq=8000),
-        ...     ]
-        ... )
-        >>> augmented = some_of(audio)  # Applies exactly 2 random augmentations
-
     Example with dict (better for structured configs):
         >>> some_of = SomeOf(
         ...     k=2,
@@ -273,7 +238,7 @@ class SomeOf(BaseAugmentation):
     def __init__(
         self,
         k: Union[int, tuple],
-        augmentations: Union[List[BaseAugmentation], Dict[str, BaseAugmentation]],
+        augmentations: dict[str, BaseAugmentation],
         replace: bool = False,
         sample_rate: int | float | None = None,
         p: float = 1.0,
@@ -296,14 +261,10 @@ class SomeOf(BaseAugmentation):
             raise ValueError("augmentations list cannot be empty")
 
         # Convert dict to list while preserving order and store names
-        if isinstance(augmentations, dict):
-            self.augmentation_names = list(augmentations.keys())
-            aug_list = list(augmentations.values())
-        else:
-            self.augmentation_names = None
-            aug_list = augmentations
+        self.augmentation_names = list(augmentations.keys())
+        aug_list = list(augmentations.values())
 
-        if sample_rate is None:
+        if sample_rate is None and aug_list[0].sample_rate is not None:
             sample_rate = aug_list[0].sample_rate
 
         super().__init__(sample_rate=sample_rate, p=p, seed=seed)
@@ -342,9 +303,7 @@ class SomeOf(BaseAugmentation):
                     f"for augmentation '{name}'"
                 )
 
-    def __call__(
-        self, audio: Union[np.ndarray, Any], **kwargs
-    ) -> Union[np.ndarray, Any]:
+    def __call__(self, audio: np.ndarray | Any, **kwargs) -> np.ndarray | Any:
         """Apply k randomly selected augmentations.
 
         Args:

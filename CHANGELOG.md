@@ -1,3 +1,9 @@
+## 0.2.3 (2025-11-26)
+
+### Fix
+
+- remove composition via lists; it's messing with hydra
+
 ## 0.2.2 (2025-11-26)
 
 ### Fix

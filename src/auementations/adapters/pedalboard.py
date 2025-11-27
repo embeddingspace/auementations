@@ -156,7 +156,7 @@ class PedalboardAdapter(BaseAugmentation):
 # Convenience wrappers for common pedalboard effects
 
 
-@auementations_store(name="lpf", group="pedalboard")
+@auementations_store(name="lpf", group="auementations/pedalboard")
 class LowPassFilter(PedalboardAdapter):
     """Apply low-pass filter.
 
@@ -197,7 +197,7 @@ class LowPassFilter(PedalboardAdapter):
         )
 
 
-@auementations_store(name="hpf", group="pedalboard")
+@auementations_store(name="hpf", group="auementations/pedalboard")
 class HighPassFilter(PedalboardAdapter):
     """Apply high-pass filter.
 

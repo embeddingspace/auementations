@@ -8,7 +8,7 @@ from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
 
 
-@auementations_store(name="compose", group="composition")
+@auementations_store(name="compose", group="auementations/composition")
 class Compose(BaseAugmentation):
     """Sequential composition of augmentations.
 
@@ -104,7 +104,7 @@ class Compose(BaseAugmentation):
             return f"Compose([\n  {aug_reprs}\n])"
 
 
-@auementations_store(name="one_of", group="composition")
+@auementations_store(name="one_of", group="auementations/composition")
 class OneOf(BaseAugmentation):
     """Randomly select and apply one augmentation from a list or dict.
 
@@ -217,7 +217,7 @@ class OneOf(BaseAugmentation):
         return config
 
 
-@auementations_store(name="some_of", group="composition")
+@auementations_store(name="some_of", group="auementations/composition")
 class SomeOf(BaseAugmentation):
     """Apply k randomly selected augmentations from a list or dict.
 

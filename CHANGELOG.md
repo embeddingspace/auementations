@@ -1,3 +1,9 @@
+## 0.2.2 (2025-11-26)
+
+### Fix
+
+- didn't handle sampleing rate quite far enough down in the chain
+
 ## 0.2.1 (2025-11-26)
 
 ### Fix

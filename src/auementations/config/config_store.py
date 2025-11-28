@@ -16,7 +16,6 @@ from hydra_zen.third_party.beartype import (
 
 # Create the singleton store
 auementations_store = ZenStore(name="auementations")(
-    group="aumentations",
     populate_full_signature=True,
     hydra_convert="all",
     zen_wrappers=validates_with_beartype,

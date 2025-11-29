@@ -116,9 +116,6 @@ class PedalboardAdapter(BaseAugmentation):
 
         # Ensure we have channel dimension
         original_shape = audio.shape
-        # if audio.ndim == 1:
-        #     # (samples,) -> (1, samples)
-        #     audio = audio.reshape(1, -1)
         b, s, c = None, None, None
         match audio.ndim:
             case 1:

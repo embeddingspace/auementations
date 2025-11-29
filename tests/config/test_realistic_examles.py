@@ -30,14 +30,14 @@ class TestRealisticOneOfComposition:
         sample_rate = 16000
 
         # Get the registered configs from the store
-        lpf_config = auementations_store.get_entry(group="pedalboard", name="lpf")[
-            "node"
-        ]
-        hpf_config = auementations_store.get_entry(group="pedalboard", name="hpf")[
-            "node"
-        ]
+        lpf_config = auementations_store.get_entry(
+            group="auementations/pedalboard", name="lpf"
+        )["node"]
+        hpf_config = auementations_store.get_entry(
+            group="auementations/pedalboard", name="hpf"
+        )["node"]
         one_of_config = auementations_store.get_entry(
-            group="composition", name="one_of"
+            group="auementations/composition", name="one_of"
         )["node"]
 
         # Build a complete config for OneOf composition
@@ -82,14 +82,14 @@ class TestRealisticOneOfComposition:
         # GIVEN: A OneOf composition with distinct filters
         sample_rate = 16000
 
-        lpf_config = auementations_store.get_entry(group="pedalboard", name="lpf")[
-            "node"
-        ]
-        hpf_config = auementations_store.get_entry(group="pedalboard", name="hpf")[
-            "node"
-        ]
+        lpf_config = auementations_store.get_entry(
+            group="auementations/pedalboard", name="lpf"
+        )["node"]
+        hpf_config = auementations_store.get_entry(
+            group="auementations/pedalboard", name="hpf"
+        )["node"]
         one_of_config = auementations_store.get_entry(
-            group="composition", name="one_of"
+            group="auementations/composition", name="one_of"
         )["node"]
 
         composition_config = builds(
@@ -138,14 +138,14 @@ class TestRealisticOneOfComposition:
         # GIVEN: A OneOf composition where filters have parameter ranges
         sample_rate = 16000
 
-        lpf_config = auementations_store.get_entry(group="pedalboard", name="lpf")[
-            "node"
-        ]
-        hpf_config = auementations_store.get_entry(group="pedalboard", name="hpf")[
-            "node"
-        ]
+        lpf_config = auementations_store.get_entry(
+            group="auementations/pedalboard", name="lpf"
+        )["node"]
+        hpf_config = auementations_store.get_entry(
+            group="auementations/pedalboard", name="hpf"
+        )["node"]
         one_of_config = auementations_store.get_entry(
-            group="composition", name="one_of"
+            group="auementations/composition", name="one_of"
         )["node"]
 
         composition_config = builds(

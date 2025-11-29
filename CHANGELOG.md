@@ -1,3 +1,15 @@
+## 0.3.0 (2025-11-28)
+
+### Feat
+
+- allow pedalboard to handle dims of 3,4
+
+### Fix
+
+- remove unnecessary code
+- fix groups in tests
+- update auementations store group for consistency
+
 ## 0.2.3 (2025-11-26)
 
 ### Fix

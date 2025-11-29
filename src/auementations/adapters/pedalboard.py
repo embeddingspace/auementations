@@ -3,6 +3,7 @@
 from typing import Any, Dict, Optional, Union
 
 import numpy as np
+from einops import rearrange
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
@@ -115,9 +116,18 @@ class PedalboardAdapter(BaseAugmentation):
 
         # Ensure we have channel dimension
         original_shape = audio.shape
-        if audio.ndim == 1:
-            # (samples,) -> (1, samples)
-            audio = audio.reshape(1, -1)
+        b, s, c = None, None, None
+        match audio.ndim:
+            case 1:
+                audio = audio[None, :]
+            case 3:  # (batch, channels, samples)
+                b, c, _ = audio.shape
+                audio = rearrange(audio, "b c t -> (b c) t")
+            case 4:  # (batch, source, channel, samples)
+                b, s, c, _ = audio.shape
+                audio = rearrange(audio, "b s c t -> (b s c) t")
+            case _:
+                pass
 
         # Reinitialize effect with new parameters
         self.randomize_parameters()
@@ -128,8 +138,15 @@ class PedalboardAdapter(BaseAugmentation):
         augmented = self.effect.process(audio, sample_rate=self.sample_rate)
 
         # Restore original shape
-        if len(original_shape) == 1:
-            augmented = augmented.squeeze(0)
+        match len(original_shape):
+            case 1:
+                augmented = augmented.squeeze(0)
+            case 3:
+                augmented = rearrange(augmented, "(b c) t -> b c t", b=b, c=c)
+            case 4:
+                augmented = rearrange(augmented, "(b s c) t -> b s c t", b=b, s=s, c=c)
+            case _:
+                pass
 
         # Restore original dtype if needed
         if augmented.dtype != original_dtype:

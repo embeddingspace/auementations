@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+import torch
 
 from auementations.core.base import BaseAugmentation
 
@@ -49,6 +50,11 @@ def mono_audio():
     frequency = 440.0  # Hz (A4 note)
     audio = np.sin(2 * np.pi * frequency * t).astype(np.float32)
     return audio
+
+
+@pytest.fixture
+def mono_audio_with_batch(mono_audio):
+    return torch.tensor(mono_audio).unsqueeze(0)
 
 
 @pytest.fixture

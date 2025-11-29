@@ -9,6 +9,7 @@ These tests demonstrate real-world usage patterns combining:
 
 import numpy as np
 import pytest
+import torch
 
 pytest.importorskip("pedalboard")
 
@@ -240,3 +241,29 @@ class TestRealisticOneOfComposition:
         # Check that not all results are identical
         all_same = all(np.allclose(results[0], r, atol=1e-6) for r in results[1:])
         assert not all_same, "All results identical - composition not working correctly"
+
+
+@pytest.mark.parametrize("aug_name", ["lpf", "hpf"])
+@pytest.mark.parametrize("ndim", [2, 3, 4])
+def test_PedalboardAugmentationsHandle2_3_4_dims(aug_name, stereo_audio, ndim):
+    sr = 16000
+    config = auementations_store.get_entry(
+        group="auementations/pedalboard", name="lpf"
+    )["node"]
+
+    # composition_config = builds(
+    #     config,
+    # )
+    #
+    match ndim:
+        case 3:
+            input = torch.tensor(stereo_audio).unsqueeze(0)
+        case 4:
+            input = torch.tensor(stereo_audio).unsqueeze(0).unsqueeze(0)
+        case _:
+            input = stereo_audio
+
+    augmentation = instantiate(config, sample_rate=sr, p=1.0)
+
+    y_hat = augmentation(input)
+    assert input.shape == y_hat.shape

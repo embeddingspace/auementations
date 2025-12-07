@@ -138,6 +138,7 @@ def power_to_db(
 
     if amin <= 0:
         raise ValueError("amin must be strictly positive")
+    amin = torch.as_tensor(amin)
 
     if torch.is_complex(S):
         warnings.warn(
@@ -149,15 +150,17 @@ def power_to_db(
         magnitude = torch.abs(S)
     else:
         magnitude = S
+    magnitude = torch.as_tensor(magnitude)
 
     if callable(ref):
         # User supplied a function to calculate reference power
         ref_value = ref(magnitude)
     else:
         ref_value = abs(ref)
+    ref_value = torch.as_tensor(ref_value)
 
-    log_spec: Tensor = 10.0 * torch.log10(torch.maximum(torch.tensor(amin), magnitude))
-    log_spec -= 10.0 * torch.log10(torch.maximum(torch.tensor(amin), torch.tensor(ref_value)))
+    log_spec: Tensor = 10.0 * torch.log10(torch.maximum(amin, magnitude))
+    log_spec -= 10.0 * torch.log10(torch.maximum(amin, ref_value))
 
     if top_db is not None:
         if top_db < 0:

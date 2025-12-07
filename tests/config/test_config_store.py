@@ -1,6 +1,5 @@
 """BDD-style tests for config_store submodule and registration decorator."""
 
-import pytest
 from hydra_zen import ZenStore
 
 # Import the decorator early for test classes
@@ -146,7 +145,7 @@ class TestRegisterConfigDecoratorWithParameters:
         entry = config_store.auementations_store.get_entry(
             "test_group", "partial_class"
         )
-        config = entry["node"]
+        _ = entry["node"]
 
         # Then
         # zen_partial=True means the config should create a partial function

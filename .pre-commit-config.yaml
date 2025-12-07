@@ -1,8 +1,15 @@
 repos:
-- hooks:
-  - id: commitizen
-  - id: commitizen-branch
-    stages:
-    - pre-push
-  repo: https://github.com/commitizen-tools/commitizen
-  rev: v4.8.2
+  - hooks:
+      - id: commitizen
+      - id: commitizen-branch
+        stages:
+          - pre-push
+    repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.2
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.8 # Use the latest stable version of ruff-pre-commit
+    hooks:
+      - id: ruff-check
+        args: [--fix] # Optional: Add --fix to automatically fix linting issues
+      - id: ruff-format

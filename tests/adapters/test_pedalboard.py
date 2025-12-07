@@ -5,12 +5,10 @@ adapter works correctly.
 """
 
 import numpy as np
-import pytest
 
 from auementations.adapters.pedalboard import (
     HighPassFilter,
     LowPassFilter,
-    PedalboardAdapter,
 )
 
 
@@ -326,10 +324,16 @@ class TestPedalboardAdapterSmallSignals:
         result = aug(small_audio)
 
         # Then - output should not be all zeros
-        assert not np.allclose(result, 0.0), "LPF should not produce all zeros for small signals"
-        assert np.any(np.abs(result) > 1e-6), "LPF output should contain meaningful non-zero values"
+        assert not np.allclose(result, 0.0), (
+            "LPF should not produce all zeros for small signals"
+        )
+        assert np.any(np.abs(result) > 1e-6), (
+            "LPF output should contain meaningful non-zero values"
+        )
         # The output magnitude should be in the same ballpark as input
-        assert np.abs(np.max(result)) > 1e-5, "LPF should preserve signal amplitude for frequencies below cutoff"
+        assert np.abs(np.max(result)) > 1e-5, (
+            "LPF should preserve signal amplitude for frequencies below cutoff"
+        )
 
     def test_given_small_amplitude_audio_when_hpf_applied_then_returns_nonzero_values(
         self,
@@ -351,10 +355,16 @@ class TestPedalboardAdapterSmallSignals:
         result = aug(small_audio)
 
         # Then - output should not be all zeros
-        assert not np.allclose(result, 0.0), "HPF should not produce all zeros for small signals"
-        assert np.any(np.abs(result) > 1e-6), "HPF output should contain meaningful non-zero values"
+        assert not np.allclose(result, 0.0), (
+            "HPF should not produce all zeros for small signals"
+        )
+        assert np.any(np.abs(result) > 1e-6), (
+            "HPF output should contain meaningful non-zero values"
+        )
         # The output magnitude should be in the same ballpark as input
-        assert np.abs(np.max(result)) > 1e-5, "HPF should preserve signal amplitude for frequencies above cutoff"
+        assert np.abs(np.max(result)) > 1e-5, (
+            "HPF should preserve signal amplitude for frequencies above cutoff"
+        )
 
 
 class TestPedalboardAdapterBatchProcessing:
@@ -397,9 +407,9 @@ class TestPedalboardAdapterBatchProcessing:
         # Compare first example with others
         for i in range(1, batch_size):
             # Examples should not be identical (different filter was applied)
-            assert not np.allclose(
-                result[0], result[i], atol=1e-4
-            ), f"Example 0 and {i} should have different filtering"
+            assert not np.allclose(result[0], result[i], atol=1e-4), (
+                f"Example 0 and {i} should have different filtering"
+            )
 
     def test_given_batch_channel_audio_when_hpf_applied_then_each_example_gets_different_filter(
         self,
@@ -435,9 +445,9 @@ class TestPedalboardAdapterBatchProcessing:
 
         # Then - outputs should be different for each batch example
         for i in range(1, batch_size):
-            assert not np.allclose(
-                result[0], result[i], atol=1e-4
-            ), f"Example 0 and {i} should have different filtering"
+            assert not np.allclose(result[0], result[i], atol=1e-4), (
+                f"Example 0 and {i} should have different filtering"
+            )
 
     def test_given_batch_source_channel_audio_when_lpf_applied_then_each_example_gets_different_filter(
         self,
@@ -473,6 +483,6 @@ class TestPedalboardAdapterBatchProcessing:
 
         # Then - outputs should be different for each batch example
         for i in range(1, batch_size):
-            assert not np.allclose(
-                result[0], result[i], atol=1e-4
-            ), f"Example 0 and {i} should have different filtering"
+            assert not np.allclose(result[0], result[i], atol=1e-4), (
+                f"Example 0 and {i} should have different filtering"
+            )

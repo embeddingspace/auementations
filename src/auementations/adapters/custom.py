@@ -34,7 +34,7 @@ class GainAugmentation(nn.Module):
             self.generator.manual_seed(self.seed)
 
         if sample_rate is not None and sample_rate <= 0:
-            raise ValueError(f"sample_rate must be an int or float > 0.")
+            raise ValueError("sample_rate must be an int or float > 0.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         p_apply = torch.rand((), generator=self.generator)

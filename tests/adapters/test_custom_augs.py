@@ -10,7 +10,9 @@ from auementations.adapters.custom import (
 from auementations.config.config_store import auementations_store
 
 
-def has_uniform_gain(tensor: torch.Tensor) -> bool:
+def has_uniform_gain(
+    tensor: torch.Tensor, tol: float = 1e-5, epsilon: float = 1e-10
+) -> bool:
     """Helper function to assert that a tensor has uniform values (constant gain applied).
 
     Checks that the standard deviation is very small relative to the mean,
@@ -18,8 +20,9 @@ def has_uniform_gain(tensor: torch.Tensor) -> bool:
     """
     std_dev = tensor.std()
     mean_val = tensor.mean()
-    relative_std = std_dev / (mean_val.abs() + 1e-10)  # Avoid division by zero
-    return relative_std < 1e-5
+    relative_std = std_dev / (mean_val.abs() + epsilon)  # Avoid division by zero
+
+    return (relative_std < tol).item()
 
 
 class TestGainAugmentation:
@@ -127,9 +130,8 @@ class TestGainAugmentation:
         # Each example should have uniform gain across its channels and samples
         for i in range(batch_size):
             ratio = y_hat[i] / (sig[i] + 1e-8)
-            assert (
-                has_uniform_gain(ratio),
-                f"Example {i} does not have uniform gain across channels/samples",
+            assert has_uniform_gain(ratio, tol=1e-4), (
+                f"Example {i} does not have uniform gain across channels/samples"
             )
 
     def test_mode_per_source_applies_different_gain_per_source(self):
@@ -167,8 +169,7 @@ class TestGainAugmentation:
                 ratio = y_hat[batch_idx, source_idx] / (
                     sig[batch_idx, source_idx] + 1e-8
                 )
-                assert (
-                    has_uniform_gain(ratio),
+                assert has_uniform_gain(ratio, tol=1e-4), (
                     f"Source {source_idx} in example {batch_idx} does not have uniform gain",
                 )
 
@@ -209,8 +210,7 @@ class TestGainAugmentation:
                     ratio = y_hat[batch_idx, source_idx, channel_idx] / (
                         sig[batch_idx, source_idx, channel_idx] + 1e-8
                     )
-                    assert (
-                        has_uniform_gain(ratio),
+                    assert has_uniform_gain(ratio, tol=5e-4), (
                         f"Channel {channel_idx} does not have uniform gain",
                     )
 
@@ -292,10 +292,6 @@ def test_handle2_3_4_dims(ndim):
 
     config = auementations_store.get_entry(group="auementations", name="gain")["node"]
 
-    # composition_config = builds(
-    #     config,
-    # )
-    #
     match ndim:
         case 3:
             shape = (batch_size, samples)

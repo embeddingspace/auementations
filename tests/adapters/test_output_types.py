@@ -12,18 +12,23 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("pedalboard")
 
-from auementations.adapters.pedalboard import (
+from auementations.adapters.pedalboard import (  # noqa: E402
     HighPassFilter as PedalboardHighPassFilter,
+)
+from auementations.adapters.pedalboard import (  # noqa: E402
     LowPassFilter as PedalboardLowPassFilter,
 )
-from auementations.adapters.torch_audiomentations import (
+from auementations.adapters.torch_audiomentations import (  # noqa: E402
     AddColoredNoise,
     Gain,
-    HighPassFilter as TorchHighPassFilter,
-    LowPassFilter as TorchLowPassFilter,
     PitchShift,
 )
-
+from auementations.adapters.torch_audiomentations import (  # noqa: E402
+    HighPassFilter as TorchHighPassFilter,
+)
+from auementations.adapters.torch_audiomentations import (  # noqa: E402
+    LowPassFilter as TorchLowPassFilter,
+)
 
 # Define all augmentations to test with their initialization parameters
 TORCH_AUDIOMENTATIONS = [
@@ -52,12 +57,22 @@ TORCH_AUDIOMENTATIONS = [
     (
         "TorchHighPassFilter",
         TorchHighPassFilter,
-        {"sample_rate": 16000, "min_cutoff_freq": 100.0, "max_cutoff_freq": 500.0, "p": 1.0},
+        {
+            "sample_rate": 16000,
+            "min_cutoff_freq": 100.0,
+            "max_cutoff_freq": 500.0,
+            "p": 1.0,
+        },
     ),
     (
         "TorchLowPassFilter",
         TorchLowPassFilter,
-        {"sample_rate": 16000, "min_cutoff_freq": 1000.0, "max_cutoff_freq": 5000.0, "p": 1.0},
+        {
+            "sample_rate": 16000,
+            "min_cutoff_freq": 1000.0,
+            "max_cutoff_freq": 5000.0,
+            "p": 1.0,
+        },
     ),
 ]
 
@@ -65,12 +80,22 @@ PEDALBOARD_AUGMENTATIONS = [
     (
         "PedalboardLowPassFilter",
         PedalboardLowPassFilter,
-        {"sample_rate": 16000, "min_cutoff_freq": 500.0, "max_cutoff_freq": 2000.0, "p": 1.0},
+        {
+            "sample_rate": 16000,
+            "min_cutoff_freq": 500.0,
+            "max_cutoff_freq": 2000.0,
+            "p": 1.0,
+        },
     ),
     (
         "PedalboardHighPassFilter",
         PedalboardHighPassFilter,
-        {"sample_rate": 16000, "min_cutoff_freq": 100.0, "max_cutoff_freq": 500.0, "p": 1.0},
+        {
+            "sample_rate": 16000,
+            "min_cutoff_freq": 100.0,
+            "max_cutoff_freq": 500.0,
+            "p": 1.0,
+        },
     ),
 ]
 
@@ -93,9 +118,9 @@ class TestTorchAudiomentationsOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a torch.Tensor
-        assert isinstance(
-            result, torch.Tensor
-        ), f"{name} did not return torch.Tensor for torch.Tensor input"
+        assert isinstance(result, torch.Tensor), (
+            f"{name} did not return torch.Tensor for torch.Tensor input"
+        )
         assert result.shape == audio.shape
 
     @pytest.mark.parametrize("name,aug_class,params", TORCH_AUDIOMENTATIONS)
@@ -111,9 +136,9 @@ class TestTorchAudiomentationsOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a numpy.ndarray
-        assert isinstance(
-            result, np.ndarray
-        ), f"{name} did not return numpy.ndarray for numpy.ndarray input"
+        assert isinstance(result, np.ndarray), (
+            f"{name} did not return numpy.ndarray for numpy.ndarray input"
+        )
         assert result.shape == audio.shape
 
     @pytest.mark.parametrize("name,aug_class,params", TORCH_AUDIOMENTATIONS)
@@ -129,9 +154,9 @@ class TestTorchAudiomentationsOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a torch.Tensor with same shape
-        assert isinstance(
-            result, torch.Tensor
-        ), f"{name} did not return torch.Tensor for mono torch.Tensor input"
+        assert isinstance(result, torch.Tensor), (
+            f"{name} did not return torch.Tensor for mono torch.Tensor input"
+        )
         assert result.shape == audio.shape
 
     @pytest.mark.parametrize("name,aug_class,params", TORCH_AUDIOMENTATIONS)
@@ -147,9 +172,9 @@ class TestTorchAudiomentationsOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a torch.Tensor with same shape
-        assert isinstance(
-            result, torch.Tensor
-        ), f"{name} did not return torch.Tensor for stereo torch.Tensor input"
+        assert isinstance(result, torch.Tensor), (
+            f"{name} did not return torch.Tensor for stereo torch.Tensor input"
+        )
         assert result.shape == audio.shape
 
 
@@ -169,9 +194,9 @@ class TestPedalboardOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a numpy.ndarray
-        assert isinstance(
-            result, np.ndarray
-        ), f"{name} did not return numpy.ndarray for numpy.ndarray input"
+        assert isinstance(result, np.ndarray), (
+            f"{name} did not return numpy.ndarray for numpy.ndarray input"
+        )
         assert result.shape == audio.shape
         assert result.dtype == audio.dtype
 
@@ -188,9 +213,9 @@ class TestPedalboardOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a torch.Tensor
-        assert isinstance(
-            result, torch.Tensor
-        ), f"{name} did not return torch.Tensor for torch.Tensor input"
+        assert isinstance(result, torch.Tensor), (
+            f"{name} did not return torch.Tensor for torch.Tensor input"
+        )
         assert result.shape == audio.shape
 
     @pytest.mark.parametrize("name,aug_class,params", PEDALBOARD_AUGMENTATIONS)
@@ -206,9 +231,9 @@ class TestPedalboardOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a numpy.ndarray with same shape
-        assert isinstance(
-            result, np.ndarray
-        ), f"{name} did not return numpy.ndarray for stereo numpy.ndarray input"
+        assert isinstance(result, np.ndarray), (
+            f"{name} did not return numpy.ndarray for stereo numpy.ndarray input"
+        )
         assert result.shape == audio.shape
         assert result.dtype == audio.dtype
 
@@ -225,9 +250,9 @@ class TestPedalboardOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a torch.Tensor with same shape
-        assert isinstance(
-            result, torch.Tensor
-        ), f"{name} did not return torch.Tensor for stereo torch.Tensor input"
+        assert isinstance(result, torch.Tensor), (
+            f"{name} did not return torch.Tensor for stereo torch.Tensor input"
+        )
         assert result.shape == audio.shape
 
     @pytest.mark.parametrize("name,aug_class,params", PEDALBOARD_AUGMENTATIONS)
@@ -245,9 +270,9 @@ class TestPedalboardOutputTypes:
             result = augmentation(audio)
 
             # THEN: Output dtype matches input dtype
-            assert (
-                result.dtype == dtype
-            ), f"{name} did not preserve dtype {dtype}, got {result.dtype}"
+            assert result.dtype == dtype, (
+                f"{name} did not preserve dtype {dtype}, got {result.dtype}"
+            )
 
     @pytest.mark.parametrize("name,aug_class,params", PEDALBOARD_AUGMENTATIONS)
     def test_given_torch_cuda_tensor_when_augmented_then_returns_torch_cuda_tensor(
@@ -266,9 +291,9 @@ class TestPedalboardOutputTypes:
         result = augmentation(audio)
 
         # THEN: Output is a torch.Tensor on the same device
-        assert isinstance(
-            result, torch.Tensor
-        ), f"{name} did not return torch.Tensor for CUDA torch.Tensor input"
+        assert isinstance(result, torch.Tensor), (
+            f"{name} did not return torch.Tensor for CUDA torch.Tensor input"
+        )
         assert result.device.type == "cuda", f"{name} did not preserve CUDA device"
         assert result.shape == audio.shape
 
@@ -289,16 +314,16 @@ class TestAllAugmentationsConsistency:
         # Test with numpy
         audio_np = np.random.randn(16000).astype(np.float32)
         result_np = augmentation(audio_np)
-        assert np.array_equal(
-            result_np, audio_np
-        ), f"{name} with p=0.0 modified numpy input"
+        assert np.array_equal(result_np, audio_np), (
+            f"{name} with p=0.0 modified numpy input"
+        )
 
         # Test with torch (all augmentations now support torch tensors)
         audio_torch = torch.randn(16000)
         result_torch = augmentation(audio_torch)
-        assert torch.equal(
-            result_torch, audio_torch
-        ), f"{name} with p=0.0 modified torch input"
+        assert torch.equal(result_torch, audio_torch), (
+            f"{name} with p=0.0 modified torch input"
+        )
 
     @pytest.mark.parametrize("name,aug_class,params", ALL_AUGMENTATIONS)
     def test_given_augmentation_when_applied_multiple_times_then_produces_variation(
@@ -324,9 +349,9 @@ class TestAllAugmentationsConsistency:
                 unique_results.append(result)
 
         # Should have some variation (at least 2 unique results from 10 applications)
-        assert (
-            len(unique_results) >= 2
-        ), f"{name} produced no variation across 10 applications"
+        assert len(unique_results) >= 2, (
+            f"{name} produced no variation across 10 applications"
+        )
 
     @pytest.mark.parametrize("name,aug_class,params", ALL_AUGMENTATIONS)
     def test_given_augmentation_when_called_then_output_not_nan_or_inf(

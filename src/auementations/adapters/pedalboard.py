@@ -7,7 +7,7 @@ from einops import rearrange
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
-from auementations.core.parameters import ParameterSampler, ParameterValue
+from auementations.core.parameters import ParameterSampler
 
 
 def _lazy_import_pedalboard():
@@ -139,11 +139,17 @@ class PedalboardAdapter(BaseAugmentation):
                     # Flatten source and channel dimensions
                     s, c, t = batch_item.shape
                     batch_item_flat = rearrange(batch_item, "s c t -> (s c) t")
-                    augmented_item = self.effect.process(batch_item_flat, sample_rate=self.sample_rate)
-                    augmented_item = rearrange(augmented_item, "(s c) t -> s c t", s=s, c=c)
+                    augmented_item = self.effect.process(
+                        batch_item_flat, sample_rate=self.sample_rate
+                    )
+                    augmented_item = rearrange(
+                        augmented_item, "(s c) t -> s c t", s=s, c=c
+                    )
                 else:  # 2D: (channels, samples)
                     # Apply directly
-                    augmented_item = self.effect.process(batch_item, sample_rate=self.sample_rate)
+                    augmented_item = self.effect.process(
+                        batch_item, sample_rate=self.sample_rate
+                    )
 
                 augmented_list.append(augmented_item)
 

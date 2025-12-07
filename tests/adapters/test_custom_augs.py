@@ -2,10 +2,12 @@ from contextlib import nullcontext
 
 import pytest
 import torch
+from hydra_zen import instantiate
 
 from auementations.adapters.custom import (
     GainAugmentation,
 )
+from auementations.config.config_store import auementations_store
 
 
 def has_uniform_gain(tensor: torch.Tensor) -> bool:
@@ -278,3 +280,32 @@ class TestGainAugmentation:
                 gains.append(ratio.mean().item())
             unique_gains = len(set([round(g, 4) for g in gains]))
             assert unique_gains > 1
+
+
+@pytest.mark.parametrize("ndim", [2, 3, 4])
+def test_handle2_3_4_dims(ndim):
+    batch_size = 2
+    sources = 1
+    channels = 1
+    samples = 1000
+    sample_rate = 16000
+
+    config = auementations_store.get_entry(group="auementations", name="gain")["node"]
+
+    # composition_config = builds(
+    #     config,
+    # )
+    #
+    match ndim:
+        case 3:
+            shape = (batch_size, samples)
+        case 4:
+            shape = (batch_size, channels, samples)
+        case _:
+            shape = (batch_size, sources, channels, samples)
+
+    audio = (torch.rand(*shape) * 2 - 1) * 0.5
+    augmentation = instantiate(config, sample_rate=sample_rate, p=1.0)
+
+    y_hat = augmentation(audio)
+    assert audio.shape == y_hat.shape

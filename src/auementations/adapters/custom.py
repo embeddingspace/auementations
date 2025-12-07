@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 
+from auementations.config.config_store import auementations_store
 from auementations.utils import amplitude_to_db, db_to_amplitude
 
 
+@auementations_store(name="gain", group="auementations")
 class GainAugmentation(nn.Module):
     VALID_MODES = ["per_batch", "per_example", "per_source", "per_channel"]
 

@@ -181,6 +181,11 @@ class PedalboardAdapter(BaseAugmentation):
             import torch
 
             augmented = torch.from_numpy(augmented).to(original_device)
+            # Replace NaN and inf values with valid numbers
+            augmented = torch.nan_to_num(augmented, nan=0.0, posinf=1.0, neginf=-1.0)
+        else:
+            # If numpy, use numpy's nan_to_num
+            augmented = np.nan_to_num(augmented, nan=0.0, posinf=1.0, neginf=-1.0)
 
         return augmented
 

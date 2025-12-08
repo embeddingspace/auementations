@@ -222,9 +222,9 @@ class LowPassFilter(PedalboardAdapter):
 
         # Handle cutoff frequency parameter
         if cutoff_freq is not None:
-            cutoff_hz = cutoff_freq
+            cutoff_hz = min(cutoff_freq, sample_rate / 2)
         elif min_cutoff_freq is not None and max_cutoff_freq is not None:
-            cutoff_hz = (min_cutoff_freq, max_cutoff_freq)
+            cutoff_hz = (min_cutoff_freq, min(max_cutoff_freq, sample_rate / 2))
         else:
             # Default range
             cutoff_hz = (150.0, 7500.0)
@@ -263,9 +263,9 @@ class HighPassFilter(PedalboardAdapter):
 
         # Handle cutoff frequency parameter
         if cutoff_freq is not None:
-            cutoff_hz = cutoff_freq
+            cutoff_hz = min(cutoff_freq, sample_rate / 2)
         elif min_cutoff_freq is not None and max_cutoff_freq is not None:
-            cutoff_hz = (min_cutoff_freq, max_cutoff_freq)
+            cutoff_hz = (min_cutoff_freq, min(max_cutoff_freq, sample_rate / 2))
         else:
             # Default range
             cutoff_hz = (20.0, 2400.0)

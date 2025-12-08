@@ -4,6 +4,8 @@ import torch.nn as nn
 from auementations.config.config_store import auementations_store
 from auementations.utils import amplitude_to_db, db_to_amplitude
 
+__all__ = ["GainAugmentation"]
+
 
 @auementations_store(name="gain", group="auementations")
 class GainAugmentation(nn.Module):

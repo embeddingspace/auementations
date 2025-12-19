@@ -3,7 +3,7 @@
 import numpy as np
 from hydra import compose, initialize
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
 
 def run_with_hydra_config():
@@ -43,7 +43,7 @@ def run_with_hydra_config():
         for i in range(n_trials):
             augmented = augmentation(audio.copy())
             gain = np.abs(augmented[100] / audio[100])
-            print(f"  Trial {i+1}: Gain = {gain:.2f}x")
+            print(f"  Trial {i + 1}: Gain = {gain:.2f}x")
 
 
 def programmatic_config_with_hydra_zen():
@@ -53,7 +53,7 @@ def programmatic_config_with_hydra_zen():
     print("=" * 60)
 
     from hydra_zen import builds, instantiate
-    from auementations.core.composition import Compose, OneOf
+    from auementations.core.composition import OneOf
     from tests.conftest import MockAugmentation
 
     # Build configs using hydra-zen
@@ -62,7 +62,7 @@ def programmatic_config_with_hydra_zen():
         sample_rate=16000,
         gain=1.5,
         p=1.0,
-        populate_full_signature=True
+        populate_full_signature=True,
     )
 
     Aug2Config = builds(
@@ -70,7 +70,7 @@ def programmatic_config_with_hydra_zen():
         sample_rate=16000,
         gain=2.0,
         p=1.0,
-        populate_full_signature=True
+        populate_full_signature=True,
     )
 
     OneOfConfig = builds(
@@ -79,7 +79,7 @@ def programmatic_config_with_hydra_zen():
         sample_rate=16000,
         weights=[0.7, 0.3],
         p=1.0,
-        populate_full_signature=True
+        populate_full_signature=True,
     )
 
     # Instantiate
@@ -88,8 +88,8 @@ def programmatic_config_with_hydra_zen():
     # Create audio and apply
     audio = np.random.randn(16000).astype(np.float32)
 
-    print(f"\nCreated OneOf with 2 augmentations")
-    print(f"Weights: [0.7, 0.3]")
+    print("\nCreated OneOf with 2 augmentations")
+    print("Weights: [0.7, 0.3]")
     print("\nApplying 10 times:")
 
     gain_counts = {1.5: 0, 2.0: 0}
@@ -98,11 +98,11 @@ def programmatic_config_with_hydra_zen():
         gain = augmented[100] / audio[100]
         gain_rounded = round(gain, 1)
         gain_counts[gain_rounded] = gain_counts.get(gain_rounded, 0) + 1
-        print(f"  Trial {i+1}: Gain = {gain:.1f}x")
+        print(f"  Trial {i + 1}: Gain = {gain:.1f}x")
 
-    print(f"\nGain distribution:")
+    print("\nGain distribution:")
     for gain, count in gain_counts.items():
-        print(f"  {gain}x: {count} times ({count/10*100:.0f}%)")
+        print(f"  {gain}x: {count} times ({count / 10 * 100:.0f}%)")
 
 
 def override_config_from_command_line():
@@ -119,7 +119,7 @@ def override_config_from_command_line():
             overrides=[
                 "data.sample_rate=44100",
                 "augmentation.p=0.5",
-            ]
+            ],
         )
 
         print("\nOverridden configuration:")

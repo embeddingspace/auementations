@@ -7,7 +7,7 @@ from einops import rearrange
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
-from auementations.core.parameters import ParameterSampler, ParameterValue
+from auementations.core.parameters import ParameterSampler
 
 
 def _lazy_import_pedalboard():
@@ -85,6 +85,7 @@ class PedalboardAdapter(BaseAugmentation):
         Args:
             audio: Input audio as numpy array or torch tensor.
                    Shape: (channels, samples) or (samples,)
+                   or (batch, channels, samples) or (batch, source, channel, samples)
             **kwargs: Additional parameters.
 
         Returns:
@@ -114,39 +115,62 @@ class PedalboardAdapter(BaseAugmentation):
         if audio.dtype not in (np.float32, np.float64):
             audio = audio.astype(np.float32)
 
-        # Ensure we have channel dimension
         original_shape = audio.shape
-        b, s, c = None, None, None
-        match audio.ndim:
-            case 1:
+
+        # Handle batched inputs (3D or 4D) - apply different parameters per example
+        if audio.ndim >= 3:
+            # Process each batch example with different parameters
+            batch_size = audio.shape[0]
+            augmented_list = []
+
+            for i in range(batch_size):
+                # Extract single batch item
+                batch_item = audio[i]
+
+                # Randomize parameters for this example
+                self.randomize_parameters()
+                self._init_effect()
+
+                # Process based on the item's dimensionality
+                # After slicing batch dimension, we have either:
+                # - 2D: (channels, samples) for 3D input
+                # - 3D: (source, channel, samples) for 4D input
+                if batch_item.ndim == 3:  # (source, channel, samples)
+                    # Flatten source and channel dimensions
+                    s, c, t = batch_item.shape
+                    batch_item_flat = rearrange(batch_item, "s c t -> (s c) t")
+                    augmented_item = self.effect.process(
+                        batch_item_flat, sample_rate=self.sample_rate
+                    )
+                    augmented_item = rearrange(
+                        augmented_item, "(s c) t -> s c t", s=s, c=c
+                    )
+                else:  # 2D: (channels, samples)
+                    # Apply directly
+                    augmented_item = self.effect.process(
+                        batch_item, sample_rate=self.sample_rate
+                    )
+
+                augmented_list.append(augmented_item)
+
+            # Stack batch back together
+            augmented = np.stack(augmented_list, axis=0)
+        else:
+            # Non-batched input (1D or 2D)
+            # Ensure we have channel dimension for 1D input
+            if audio.ndim == 1:
                 audio = audio[None, :]
-            case 3:  # (batch, channels, samples)
-                b, c, _ = audio.shape
-                audio = rearrange(audio, "b c t -> (b c) t")
-            case 4:  # (batch, source, channel, samples)
-                b, s, c, _ = audio.shape
-                audio = rearrange(audio, "b s c t -> (b s c) t")
-            case _:
-                pass
 
-        # Reinitialize effect with new parameters
-        self.randomize_parameters()
-        self._init_effect()
+            # Randomize parameters
+            self.randomize_parameters()
+            self._init_effect()
 
-        # Apply effect
-        # Pedalboard process expects (num_channels, num_samples) and sample_rate
-        augmented = self.effect.process(audio, sample_rate=self.sample_rate)
+            # Apply effect
+            augmented = self.effect.process(audio, sample_rate=self.sample_rate)
 
-        # Restore original shape
-        match len(original_shape):
-            case 1:
+            # Restore original shape for 1D
+            if len(original_shape) == 1:
                 augmented = augmented.squeeze(0)
-            case 3:
-                augmented = rearrange(augmented, "(b c) t -> b c t", b=b, c=c)
-            case 4:
-                augmented = rearrange(augmented, "(b s c) t -> b s c t", b=b, s=s, c=c)
-            case _:
-                pass
 
         # Restore original dtype if needed
         if augmented.dtype != original_dtype:
@@ -157,6 +181,11 @@ class PedalboardAdapter(BaseAugmentation):
             import torch
 
             augmented = torch.from_numpy(augmented).to(original_device)
+            # Replace NaN and inf values with valid numbers
+            augmented = torch.nan_to_num(augmented, nan=0.0, posinf=1.0, neginf=-1.0)
+        else:
+            # If numpy, use numpy's nan_to_num
+            augmented = np.nan_to_num(augmented, nan=0.0, posinf=1.0, neginf=-1.0)
 
         return augmented
 
@@ -198,9 +227,9 @@ class LowPassFilter(PedalboardAdapter):
 
         # Handle cutoff frequency parameter
         if cutoff_freq is not None:
-            cutoff_hz = cutoff_freq
+            cutoff_hz = min(cutoff_freq, sample_rate / 2)
         elif min_cutoff_freq is not None and max_cutoff_freq is not None:
-            cutoff_hz = (min_cutoff_freq, max_cutoff_freq)
+            cutoff_hz = (min_cutoff_freq, min(max_cutoff_freq, sample_rate / 2))
         else:
             # Default range
             cutoff_hz = (150.0, 7500.0)
@@ -239,9 +268,9 @@ class HighPassFilter(PedalboardAdapter):
 
         # Handle cutoff frequency parameter
         if cutoff_freq is not None:
-            cutoff_hz = cutoff_freq
+            cutoff_hz = min(cutoff_freq, sample_rate / 2)
         elif min_cutoff_freq is not None and max_cutoff_freq is not None:
-            cutoff_hz = (min_cutoff_freq, max_cutoff_freq)
+            cutoff_hz = (min_cutoff_freq, min(max_cutoff_freq, sample_rate / 2))
         else:
             # Default range
             cutoff_hz = (20.0, 2400.0)

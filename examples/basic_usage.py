@@ -36,16 +36,18 @@ def example_sequential_composition():
     audio = np.random.randn(16000).astype(np.float32)
 
     # Create pipeline: apply gain, then another gain
-    pipeline = Compose([
-        MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
-        MockAugmentation(sample_rate=16000, gain=1.5, p=1.0),
-    ])
+    pipeline = Compose(
+        [
+            MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
+            MockAugmentation(sample_rate=16000, gain=1.5, p=1.0),
+        ]
+    )
 
     # Apply
     augmented = pipeline(audio)
 
-    print(f"Pipeline: Gain(2.0) -> Gain(1.5)")
-    print(f"Expected total gain: 2.0 * 1.5 = 3.0x")
+    print("Pipeline: Gain(2.0) -> Gain(1.5)")
+    print("Expected total gain: 2.0 * 1.5 = 3.0x")
     print(f"Actual gain: {augmented[100] / audio[100]:.1f}x")
     print()
 
@@ -60,18 +62,20 @@ def example_one_of_selection():
     audio = np.random.randn(16000).astype(np.float32)
 
     # Create OneOf: choose one augmentation randomly
-    one_of = OneOf([
-        MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
-        MockAugmentation(sample_rate=16000, gain=3.0, p=1.0),
-        MockAugmentation(sample_rate=16000, gain=4.0, p=1.0),
-    ])
+    one_of = OneOf(
+        [
+            MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
+            MockAugmentation(sample_rate=16000, gain=3.0, p=1.0),
+            MockAugmentation(sample_rate=16000, gain=4.0, p=1.0),
+        ]
+    )
 
     # Apply multiple times to see different selections
     print("Applying OneOf 5 times:")
     for i in range(5):
         augmented = one_of(audio.copy())
         gain = augmented[100] / audio[100]
-        print(f"  Trial {i+1}: Gain = {gain:.1f}x")
+        print(f"  Trial {i + 1}: Gain = {gain:.1f}x")
     print()
 
 
@@ -90,7 +94,7 @@ def example_weighted_selection():
             MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
             MockAugmentation(sample_rate=16000, gain=3.0, p=1.0),
         ],
-        weights=[0.7, 0.3]
+        weights=[0.7, 0.3],
     )
 
     # Apply many times and count
@@ -107,8 +111,8 @@ def example_weighted_selection():
             gain_3_count += 1
 
     print(f"Applied OneOf {n_trials} times with weights [0.7, 0.3]:")
-    print(f"  Gain 2.0x: {gain_2_count} times ({gain_2_count/n_trials*100:.1f}%)")
-    print(f"  Gain 3.0x: {gain_3_count} times ({gain_3_count/n_trials*100:.1f}%)")
+    print(f"  Gain 2.0x: {gain_2_count} times ({gain_2_count / n_trials * 100:.1f}%)")
+    print(f"  Gain 3.0x: {gain_3_count} times ({gain_3_count / n_trials * 100:.1f}%)")
     print()
 
 
@@ -130,14 +134,14 @@ def example_some_of():
             MockAugmentation(sample_rate=16000, gain=1.2, p=1.0),
             MockAugmentation(sample_rate=16000, gain=1.1, p=1.0),
         ],
-        replace=False
+        replace=False,
     )
 
     print("Applying SomeOf(k=2) from 4 augmentations, 3 times:")
     for i in range(3):
         augmented = some_of(audio.copy())
         gain = augmented[100] / audio[100]
-        print(f"  Trial {i+1}: Total gain = {gain:.2f}x")
+        print(f"  Trial {i + 1}: Total gain = {gain:.2f}x")
     print()
 
 
@@ -153,20 +157,24 @@ def example_nested_composition():
     # Create complex pipeline:
     # 1. Always apply gain of 2.0
     # 2. Then randomly choose between two augmentations
-    pipeline = Compose([
-        MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
-        OneOf([
-            MockAugmentation(sample_rate=16000, gain=1.5, p=1.0),
+    pipeline = Compose(
+        [
             MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
-        ])
-    ])
+            OneOf(
+                [
+                    MockAugmentation(sample_rate=16000, gain=1.5, p=1.0),
+                    MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
+                ]
+            ),
+        ]
+    )
 
     print("Pipeline: Always(Gain 2.0) -> OneOf(Gain 1.5 or 2.0)")
     print("Applying 5 times:")
     for i in range(5):
         augmented = pipeline(audio.copy())
         gain = augmented[100] / audio[100]
-        print(f"  Trial {i+1}: Total gain = {gain:.1f}x")
+        print(f"  Trial {i + 1}: Total gain = {gain:.1f}x")
     print()
 
 
@@ -192,8 +200,10 @@ def example_probabilistic_application():
             applied_count += 1
 
     print(f"Augmentation with p=0.5 applied {n_trials} times:")
-    print(f"  Actually applied: {applied_count} times ({applied_count/n_trials*100:.1f}%)")
-    print(f"  Expected: ~500 times (50%)")
+    print(
+        f"  Actually applied: {applied_count} times ({applied_count / n_trials * 100:.1f}%)"
+    )
+    print("  Expected: ~500 times (50%)")
     print()
 
 
@@ -204,13 +214,18 @@ def example_config_export():
     print("=" * 60)
 
     # Create complex pipeline
-    pipeline = Compose([
-        MockAugmentation(sample_rate=16000, gain=2.0, p=0.8),
-        OneOf([
-            MockAugmentation(sample_rate=16000, gain=1.5, p=1.0),
-            MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
-        ], weights=[0.6, 0.4])
-    ])
+    pipeline = Compose(
+        [
+            MockAugmentation(sample_rate=16000, gain=2.0, p=0.8),
+            OneOf(
+                [
+                    MockAugmentation(sample_rate=16000, gain=1.5, p=1.0),
+                    MockAugmentation(sample_rate=16000, gain=2.0, p=1.0),
+                ],
+                weights=[0.6, 0.4],
+            ),
+        ]
+    )
 
     # Export to config
     config = pipeline.to_config()

@@ -6,7 +6,7 @@ import numpy as np
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
-from auementations.core.parameters import ParameterSampler, ParameterValue
+from auementations.core.parameters import ParameterSampler
 
 
 def _lazy_import_torch_audiomentations():

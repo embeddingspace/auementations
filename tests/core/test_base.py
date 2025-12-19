@@ -7,7 +7,6 @@ augmentation interface works as expected.
 import numpy as np
 import pytest
 
-from auementations.core.base import BaseAugmentation
 from tests.conftest import MockAugmentation
 
 
@@ -120,7 +119,9 @@ class TestBaseAugmentationProbabilisticBehavior:
 class TestBaseAugmentationConfiguration:
     """Test scenarios for augmentation configuration export."""
 
-    def test_given_augmentation_when_exported_to_config_then_contains_all_parameters(self):
+    def test_given_augmentation_when_exported_to_config_then_contains_all_parameters(
+        self,
+    ):
         """Given an augmentation, when exported to config, then config contains all parameters."""
         # Given
         aug = MockAugmentation(sample_rate=16000, gain=2.5, p=0.7, seed=42)

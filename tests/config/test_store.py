@@ -1,6 +1,5 @@
 """BDD-style tests for centralized hydra-zen store functionality."""
 
-import pytest
 from hydra_zen import ZenStore, instantiate
 
 
@@ -86,9 +85,7 @@ class TestStoreCompositionConfigs:
         from auementations.core.composition import Compose
         from tests.conftest import MockAugmentation
 
-        compose_config = auementations_store(
-            group="auementations/composition", name="compose"
-        )
+        _ = auementations_store(group="auementations/composition", name="compose")
 
         # Create a config with actual augmentations
         config_dict = {

@@ -2,19 +2,26 @@
 
 from auementations.adapters.torch_audiomentations import (
     AddColoredNoise,
-    Gain,
-    HighPassFilter as TorchHighPassFilter,
-    LowPassFilter as TorchLowPassFilter,
     PitchShift,
     TimeStretch,
     TorchAudiomentationsAdapter,
+)
+from auementations.adapters.torch_audiomentations import (
+    HighPassFilter as TorchHighPassFilter,
+)
+from auementations.adapters.torch_audiomentations import (
+    LowPassFilter as TorchLowPassFilter,
 )
 
 # Pedalboard adapters - may not be available if pedalboard not installed
 try:
     from auementations.adapters.pedalboard import (
         HighPassFilter as PedalboardHighPassFilter,
+    )
+    from auementations.adapters.pedalboard import (
         LowPassFilter as PedalboardLowPassFilter,
+    )
+    from auementations.adapters.pedalboard import (
         PedalboardAdapter,
     )
 
@@ -25,10 +32,11 @@ except ImportError:
     PedalboardHighPassFilter = None
     PedalboardLowPassFilter = None
 
+from auementations.adapters.custom import GainAugmentation
+
 __all__ = [
     # Torch audiomentations
     "TorchAudiomentationsAdapter",
-    "Gain",
     "PitchShift",
     "AddColoredNoise",
     "TorchHighPassFilter",
@@ -38,4 +46,6 @@ __all__ = [
     "PedalboardAdapter",
     "PedalboardHighPassFilter",
     "PedalboardLowPassFilter",
+    # auementations
+    "GainAugmentation",
 ]

@@ -248,7 +248,7 @@ class TestRealisticOneOfComposition:
 def test_PedalboardAugmentationsHandle2_3_4_dims(aug_name, stereo_audio, ndim):
     sr = 16000
     config = auementations_store.get_entry(
-        group="auementations/pedalboard", name="lpf"
+        group="auementations/pedalboard", name=aug_name
     )["node"]
 
     # composition_config = builds(

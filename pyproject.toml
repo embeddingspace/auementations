@@ -4,9 +4,10 @@ version = "0.2.3"
 description = "A composable audio augmentation library with Hydra configuration support"
 readme = "README.md"
 authors = [
-    { name = "Christopher Jacoby", email = "christopher@antarestech.com" }
+    { name = "Christopher Jacoby" },
+    { name = "Constantinos Dimitriou" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.24.0",
     "hydra-core>=1.3.0",

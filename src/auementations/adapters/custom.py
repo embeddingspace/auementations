@@ -126,3 +126,110 @@ class GainAugmentation(nn.Module):
             x = x * random_gain_in_a
 
         return x
+
+
+@auementations_store(name="noise", group="auementations")
+class NoiseAugmentation(nn.Module):
+    """Apply a constant gain noise to each example in a batch."""
+
+    NOISE_MODES = ["fixed_db", "fixed_amp", "range_db"]
+    VALID_MODES = ["per_batch", "per_example"]
+
+    def __init__(
+        self,
+        sample_rate: int | float | None = None,
+        p: float = 1.0,
+        min_gain_db: float = -100.0,
+        max_gain_db: float = -75.0,
+        gain_db: float | None = None,
+        gain_amp: float | None = None,
+        mode: str = "per_batch",
+        seed: int | None = None,
+    ):
+        super().__init__()
+        self.sample_rate: int | float = sample_rate
+        self.p: float = p
+        self.min_gain_db: float | None = None
+        self.max_gain_db: float | None = None
+        self.gain_db: float | None = None
+        self.gain_amp: float | None = None
+        self.mode = mode
+
+        if gain_db is not None:
+            self.noise_mode = "fixed_db"
+            self.gain_db = gain_db
+
+        elif gain_amp is not None:
+            self.noise_mode = "fixed_amp"
+            self.gain_amp = gain_amp
+
+        else:
+            self.noise_mode = "range_db"
+            self.min_gain_db = min_gain_db
+            self.max_gain_db = max_gain_db
+
+        self.seed = seed
+        self.generator = torch.Generator()
+        if self.seed is not None:
+            self.generator.manual_seed(self.seed)
+
+    def noise_from_mode(self, x: torch.Tensor) -> torch.Tensor:
+        random_gain_in_a: torch.Tensor | float = 1.0
+        noise_sig = torch.rand_like(x) * 2 - 1
+
+        match self.noise_mode:
+            case "fixed_db":
+                random_gain_in_a = db_to_amplitude(torch.as_tensor(self.gain_db))
+
+            case "fixed_amp":
+                random_gain_in_a = self.gain_amp
+
+            case "range_db":
+                match self.mode:
+                    case "per_batch":
+                        uniform_0_1_tensor = torch.rand(1, generator=self.generator)
+                    case "per_example":
+                        num_gains = x.shape[0]
+                        gain_shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+                        uniform_0_1_tensor = torch.rand(
+                            (num_gains,), generator=self.generator
+                        )
+                        uniform_0_1_tensor = uniform_0_1_tensor.reshape(gain_shape)
+
+                random_gain_in_db = (
+                    self.max_gain_db - self.min_gain_db
+                ) * uniform_0_1_tensor + self.min_gain_db
+
+                random_gain_in_a = db_to_amplitude(random_gain_in_db)
+
+        return noise_sig * random_gain_in_a
+
+    def forward(self, x):
+        p_apply = torch.rand((), generator=self.generator)
+        if p_apply <= self.p:
+            noise = self.noise_from_mode(x)
+
+            return x + noise
+
+
+# @auementations_store(name="relative_noise", group="auementations")
+# class RelativeNoiseAugmentation(nn.Module):
+#     """Apply a noise a specified db less than the signal."""
+
+#     VALID_MODES = ["per_example"]
+
+#     def __init__(self, sample_rate: int | float | None = None):
+#         self.generator = torch.Generator()
+#         if self.seed is not None:
+#             self.generator.manual_seed(self.seed)
+
+#     def noise_from_mode(self, x: torch.Tensor) -> torch.Tensor:
+#         return torch.rand_like(x) * 2 - 1
+
+#     def forward(self, x):
+#         p_apply = torch.rand((), generator=self.generator)
+
+#         if p_apply <= self.p:
+#             noise = self.noise_from_mode(x)
+
+#             return x + noise

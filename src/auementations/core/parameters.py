@@ -1,8 +1,8 @@
 """Parameter sampling utilities for probabilistic augmentations."""
 
 from typing import Any, Dict, Tuple, Union
-import numpy as np
 
+import numpy as np
 
 # Type alias for parameter values that can be single values or ranges
 ParameterValue = Union[float, int, Tuple[float, float], Tuple[int, int], Dict[str, Any]]
@@ -18,7 +18,7 @@ class ParameterSampler:
     """
 
     @staticmethod
-    def sample(value: ParameterValue, dtype: type = float) -> Union[float, int]:
+    def sample(value: ParameterValue, dtype: type = float) -> float | int:
         """Sample a parameter value.
 
         Args:
@@ -59,7 +59,7 @@ class ParameterSampler:
         raise TypeError(f"Unsupported parameter type: {type(value)}")
 
     @staticmethod
-    def _sample_from_distribution(spec: Dict[str, Any], dtype: type) -> Union[float, int]:
+    def _sample_from_distribution(spec: Dict[str, Any], dtype: type) -> float | int:
         """Sample from a distribution specified by a dictionary.
 
         Args:
@@ -125,10 +125,10 @@ class ParameterValidator:
 
     @staticmethod
     def validate_range(
-        value: Union[float, int],
-        min_val: Union[float, int, None] = None,
-        max_val: Union[float, int, None] = None,
-        name: str = "parameter"
+        value: float | int,
+        min_val: float | int | None = None,
+        max_val: float | int | None = None,
+        name: str = "parameter",
     ) -> None:
         """Validate that a value is within specified range.
 

@@ -531,3 +531,79 @@ class TestOneOfPerExampleLogging:
         assert log_dict["augmentation"] == "OneOf"
         assert "selected" in log_dict
         assert "transform" in log_dict
+
+
+class TestPeakFilterCompositionLogging:
+    """Tests for logging with PeakFilter in compositions."""
+
+    def test_peak_filter_in_someof_with_logging(self):
+        """GIVEN PeakFilter in SomeOf, WHEN called with log=True, THEN should return log."""
+        # GIVEN: A SomeOf composition containing PeakFilter
+        from auementations.adapters.pedalboard import PeakFilter
+
+        aug = SomeOf(
+            k=1,
+            augmentations={
+                "peak": PeakFilter(
+                    sample_rate=16000,
+                    min_center_freq=1000.0,
+                    max_center_freq=1000.0,
+                    min_gain_db=6.0,
+                    max_gain_db=6.0,
+                    p=1.0,
+                ),
+            },
+            sample_rate=16000,
+            mode="per_batch",
+            p=1.0,
+        )
+        audio = torch.randn(2, 2, 1, 16000) * 0.5
+
+        # WHEN: Called with log=True
+        audio_out, log_dict = aug(audio, log=True)
+
+        # THEN: Should return log dict with PeakFilter info
+        assert isinstance(log_dict, dict)
+        assert log_dict["augmentation"] == "SomeOf"
+        assert "selected" in log_dict
+        assert "peak" in log_dict["selected"]
+        assert "transforms" in log_dict
+        assert "peak" in log_dict["transforms"]
+        peak_log = log_dict["transforms"]["peak"]
+        assert peak_log["augmentation"] == "PeakFilter"
+        assert "parameters" in peak_log
+
+    def test_peak_filter_in_oneof_with_logging(self):
+        """GIVEN PeakFilter in OneOf, WHEN called with log=True, THEN should return log."""
+        # GIVEN: A OneOf composition containing PeakFilter
+        from auementations.adapters.pedalboard import PeakFilter
+
+        aug = OneOf(
+            augmentations={
+                "peak": PeakFilter(
+                    sample_rate=16000,
+                    min_center_freq=1000.0,
+                    max_center_freq=1000.0,
+                    min_gain_db=6.0,
+                    max_gain_db=6.0,
+                    p=1.0,
+                ),
+            },
+            sample_rate=16000,
+            mode="per_batch",
+            p=1.0,
+        )
+        audio = torch.randn(2, 2, 1, 16000) * 0.5
+
+        # WHEN: Called with log=True
+        audio_out, log_dict = aug(audio, log=True)
+
+        # THEN: Should return log dict with PeakFilter info
+        assert isinstance(log_dict, dict)
+        assert log_dict["augmentation"] == "OneOf"
+        assert "selected" in log_dict
+        assert log_dict["selected"] == "peak"
+        assert "transform" in log_dict
+        peak_log = log_dict["transform"]
+        assert peak_log["augmentation"] == "PeakFilter"
+        assert "parameters" in peak_log

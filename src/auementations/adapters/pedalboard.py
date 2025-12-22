@@ -408,10 +408,50 @@ class PeakFilter(nn.Module):
 
         return filtered
 
+    def __call__(
+        self, x: Union[torch.Tensor, np.ndarray], log: bool = False, **kwargs
+    ) -> Union[
+        Union[torch.Tensor, np.ndarray],
+        tuple[Union[torch.Tensor, np.ndarray], Optional[Dict]],
+    ]:
+        """Apply peak filter augmentation.
+
+        Args:
+            x: Input audio with shape (batch, source, channel, time).
+               Also accepts numpy arrays.
+            log: If True, return (audio, log_dict). If False, return audio only.
+            **kwargs: Additional parameters (ignored).
+
+        Returns:
+            If log=False: Augmented audio with same shape and type as input.
+            If log=True: Tuple of (augmented_audio, log_dict).
+        """
+        # Call forward method
+        result = self.forward(x)
+
+        if not log:
+            return result
+
+        # Create log dict
+        # Only include log if augmentation was applied (check if result is same as input)
+        if isinstance(x, torch.Tensor):
+            was_applied = not torch.allclose(result, x)
+        else:
+            was_applied = not np.allclose(result, x)
+
+        if not was_applied:
+            return result, None
+
+        log_dict = {
+            "augmentation": self.__class__.__name__,
+            "parameters": self.current_params.copy(),
+        }
+        return result, log_dict
+
     def forward(
         self, x: Union[torch.Tensor, np.ndarray]
     ) -> Union[torch.Tensor, np.ndarray]:
-        """Apply peak filter augmentation.
+        """Apply peak filter augmentation (internal implementation).
 
         Args:
             x: Input audio with shape (batch, source, channel, time).

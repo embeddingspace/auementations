@@ -385,3 +385,56 @@ class TestPeakFilter:
 
         # THEN: Q should be within the specified range
         assert min_q <= aug.current_params["q"] <= max_q
+
+    def test_logging_returns_augmentation_info(self):
+        """GIVEN PeakFilter with log=True, WHEN applied, THEN should return log dict."""
+        # GIVEN: Audio and PeakFilter with fixed parameters
+        audio = torch.randn(2, 2, 1, 8000) * 0.5
+        aug = PeakFilter(
+            sample_rate=16000,
+            min_center_freq=1000.0,
+            max_center_freq=1000.0,
+            min_gain_db=6.0,
+            max_gain_db=6.0,
+            min_q=0.707,
+            max_q=0.707,
+            p=1.0,
+        )
+
+        # WHEN: Applied with log=True
+        result, log_dict = aug(audio, log=True)
+
+        # THEN: Should return both result and log dict
+        assert result.shape == audio.shape
+        assert log_dict is not None
+        assert log_dict["augmentation"] == "PeakFilter"
+        assert "parameters" in log_dict
+        assert "center_freq" in log_dict["parameters"]
+        assert "gain_db" in log_dict["parameters"]
+        assert "q" in log_dict["parameters"]
+
+    def test_logging_with_p0_returns_none(self):
+        """GIVEN PeakFilter with p=0 and log=True, WHEN applied, THEN log should be None."""
+        # GIVEN: Audio and PeakFilter with p=0
+        audio = torch.randn(2, 2, 1, 8000) * 0.5
+        aug = PeakFilter(sample_rate=16000, p=0.0)
+
+        # WHEN: Applied with log=True
+        result, log_dict = aug(audio, log=True)
+
+        # THEN: Should return original audio and None for log
+        assert torch.allclose(result, audio)
+        assert log_dict is None
+
+    def test_logging_disabled_returns_only_audio(self):
+        """GIVEN PeakFilter with log=False, WHEN applied, THEN should return only audio."""
+        # GIVEN: Audio and PeakFilter
+        audio = torch.randn(2, 2, 1, 8000) * 0.5
+        aug = PeakFilter(sample_rate=16000, p=1.0)
+
+        # WHEN: Applied with log=False (default)
+        result = aug(audio, log=False)
+
+        # THEN: Should return only audio (not a tuple)
+        assert isinstance(result, torch.Tensor)
+        assert result.shape == audio.shape

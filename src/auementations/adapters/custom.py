@@ -14,8 +14,8 @@ class GainAugmentation(nn.Module):
     def __init__(
         self,
         sample_rate: int | float | None = None,
-        min_gain_db: float = -12.0,
-        max_gain_db: float = 12.0,
+        min_gain_db: int | float = -12.0,
+        max_gain_db: int | float = 12.0,
         p: float = 1.0,
         mode: str = "per_example",
         seed: int | None = None,
@@ -38,10 +38,65 @@ class GainAugmentation(nn.Module):
         if sample_rate is not None and sample_rate <= 0:
             raise ValueError("sample_rate must be an int or float > 0.")
 
+        # For logging
+        self._last_gains_db = None
+        self._last_applied = False
+
+    def randomize_parameters(self):
+        """Compatibility method for compositions. GainAugmentation does randomization internally."""
+        pass
+
+    def __call__(self, x: torch.Tensor, log: bool = False):
+        """Apply augmentation with optional logging.
+
+        Args:
+            x: Input audio tensor.
+            log: If True, return (audio, log_dict). If False, return audio only.
+
+        Returns:
+            If log=False: Augmented audio tensor.
+            If log=True: Tuple of (augmented_audio, log_dict).
+        """
+        # Reset logging state
+        self._last_gains_db = None
+        self._last_applied = False
+
+        # Call forward
+        output = self.forward(x)
+
+        if not log:
+            return output
+
+        # Build log dict
+        if not self._last_applied:
+            log_dict = None
+        elif self.mode == "per_example" and isinstance(self._last_gains_db, list):
+            # Per-example mode: return list of dicts
+            log_dict = []
+            for gain_db in self._last_gains_db:
+                if gain_db is not None:
+                    log_dict.append(
+                        {
+                            "augmentation": self.__class__.__name__,
+                            "parameters": {"gain_db": gain_db},
+                        }
+                    )
+                else:
+                    log_dict.append(None)
+        else:
+            # Single gain or per_batch mode
+            log_dict = {
+                "augmentation": self.__class__.__name__,
+                "parameters": {"gain_db": self._last_gains_db},
+            }
+
+        return output, log_dict
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         p_apply = torch.rand((), generator=self.generator)
 
         if p_apply <= self.p:
+            self._last_applied = True
             # Determine the reduction dimensions and gain shape based on mode
             match self.mode:
                 case "per_example":
@@ -118,6 +173,17 @@ class GainAugmentation(nn.Module):
                 max_gain_db - self.min_gain_db
             ) * uniform_0_1_tensor + self.min_gain_db
 
+            # Store for logging
+            if self.mode == "per_example":
+                # Convert tensor to list of floats for per-example logging
+                self._last_gains_db = random_gain_in_db.flatten().tolist()
+            elif self.mode == "per_batch":
+                # Store as single scalar
+                self._last_gains_db = random_gain_in_db.item()
+            else:
+                # For per_source and per_channel modes, store the flattened list
+                self._last_gains_db = random_gain_in_db.flatten().tolist()
+
             # Convert to amplitude and reshape
             random_gain_in_a = db_to_amplitude(random_gain_in_db)
             random_gain_in_a = random_gain_in_a.reshape(gain_shape)
@@ -173,6 +239,60 @@ class NoiseAugmentation(nn.Module):
         if self.seed is not None:
             self.generator.manual_seed(self.seed)
 
+        # For logging
+        self._last_gain_db = None
+        self._last_applied = False
+
+    def randomize_parameters(self):
+        """Compatibility method for compositions. NoiseAugmentation does randomization internally."""
+        pass
+
+    def __call__(self, x: torch.Tensor, log: bool = False):
+        """Apply augmentation with optional logging.
+
+        Args:
+            x: Input audio tensor.
+            log: If True, return (audio, log_dict). If False, return audio only.
+
+        Returns:
+            If log=False: Augmented audio tensor.
+            If log=True: Tuple of (augmented_audio, log_dict).
+        """
+        # Reset logging state
+        self._last_gain_db = None
+        self._last_applied = False
+
+        # Call forward
+        output = self.forward(x)
+
+        if not log:
+            return output
+
+        # Build log dict
+        if not self._last_applied:
+            log_dict = None
+        elif self.mode == "per_example" and isinstance(self._last_gain_db, list):
+            # Per-example mode: return list of dicts
+            log_dict = []
+            for gain_db in self._last_gain_db:
+                if gain_db is not None:
+                    log_dict.append(
+                        {
+                            "augmentation": self.__class__.__name__,
+                            "parameters": {"gain_db": gain_db},
+                        }
+                    )
+                else:
+                    log_dict.append(None)
+        else:
+            # Single gain or per_batch mode
+            log_dict = {
+                "augmentation": self.__class__.__name__,
+                "parameters": {"gain_db": self._last_gain_db},
+            }
+
+        return output, log_dict
+
     def noise_from_mode(self, x: torch.Tensor) -> torch.Tensor:
         random_gain_in_a: torch.Tensor | float = 1.0
         noise_sig = torch.rand_like(x) * 2 - 1
@@ -180,9 +300,15 @@ class NoiseAugmentation(nn.Module):
         match self.noise_mode:
             case "fixed_db":
                 random_gain_in_a = db_to_amplitude(torch.as_tensor(self.gain_db))
+                # Store for logging
+                self._last_gain_db = self.gain_db
 
             case "fixed_amp":
                 random_gain_in_a = self.gain_amp
+                # Convert to dB for logging
+                self._last_gain_db = amplitude_to_db(
+                    torch.as_tensor(self.gain_amp)
+                ).item()
 
             case "range_db":
                 match self.mode:
@@ -200,6 +326,12 @@ class NoiseAugmentation(nn.Module):
                     self.max_gain_db - self.min_gain_db
                 ) * uniform_0_1_tensor + self.min_gain_db
 
+                # Store for logging
+                if self.mode == "per_example":
+                    self._last_gain_db = random_gain_in_db.flatten().tolist()
+                else:
+                    self._last_gain_db = random_gain_in_db.item()
+
                 random_gain_in_a = db_to_amplitude(random_gain_in_db)
 
         return noise_sig * random_gain_in_a
@@ -207,9 +339,10 @@ class NoiseAugmentation(nn.Module):
     def forward(self, x):
         p_apply = torch.rand((), generator=self.generator)
         if p_apply <= self.p:
+            self._last_applied = True
             noise = self.noise_from_mode(x)
-
             return x + noise
+        return x
 
 
 # @auementations_store(name="relative_noise", group="auementations")

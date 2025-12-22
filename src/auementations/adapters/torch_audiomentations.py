@@ -82,20 +82,22 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
             else:
                 self.current_params[key] = value
 
-    def __call__(
-        self, audio: Union[np.ndarray, Any], **kwargs
-    ) -> Union[np.ndarray, Any]:
+    def __call__(self, audio: Union[np.ndarray, Any], log: bool = False, **kwargs):
         """Apply augmentation.
 
         Args:
             audio: Input audio as numpy array or torch tensor.
                    Shape: (batch, channels, samples) or (channels, samples) or (samples,)
+            log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters.
 
         Returns:
-            Augmented audio in same format as input.
+            If log=False: Augmented audio in same format as input.
+            If log=True: Tuple of (augmented_audio, log_dict).
         """
         if not self.should_apply():
+            if log:
+                return audio, None
             return audio
 
         # Convert to torch tensor if needed
@@ -125,8 +127,14 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
 
         # Convert back to numpy if needed
         if was_numpy:
-            return augmented.numpy()
-        return augmented
+            augmented = augmented.numpy()
+
+        if not log:
+            return augmented
+
+        # Create log dict with current parameters
+        log_dict = self._create_log_dict(self.current_params)
+        return augmented, log_dict
 
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""

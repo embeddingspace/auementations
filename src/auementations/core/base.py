@@ -49,17 +49,21 @@ class BaseAugmentation(ABC):
 
     @abstractmethod
     def __call__(
-        self, audio: Union[np.ndarray, Any], **kwargs
-    ) -> Union[np.ndarray, Any]:
+        self, audio: Union[np.ndarray, Any], log: bool = False, **kwargs
+    ) -> Union[np.ndarray, Any, tuple[Union[np.ndarray, Any], Optional[Dict]]]:
         """Apply augmentation to audio.
 
         Args:
             audio: Audio data as numpy array or backend-specific tensor.
                    Shape: (num_channels, num_samples) or (num_samples,)
+            log: If True, return (audio, log_dict) tuple. If False, return audio only.
             **kwargs: Additional backend-specific parameters.
 
         Returns:
-            Augmented audio in same format as input.
+            If log=False: Augmented audio in same format as input.
+            If log=True: Tuple of (augmented_audio, log_dict) where log_dict contains
+                        information about the augmentation that was applied.
+                        log_dict is None if augmentation was not applied (p check failed).
         """
         pass
 
@@ -79,6 +83,20 @@ class BaseAugmentation(ABC):
             True if augmentation should be applied, False otherwise.
         """
         return np.random.random() < self.p
+
+    def _create_log_dict(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a log dictionary for this augmentation.
+
+        Args:
+            parameters: Dictionary of parameter names and values that were used.
+
+        Returns:
+            Dictionary containing augmentation name and parameters.
+        """
+        return {
+            "augmentation": self.__class__.__name__,
+            "parameters": parameters,
+        }
 
     def to_config(self) -> Dict[str, Any]:
         """Export augmentation configuration as dictionary.

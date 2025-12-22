@@ -72,17 +72,21 @@ class Compose(BaseAugmentation):
                     f"for augmentation '{name}' ({aug.__class__.__name__})"
                 )
 
-    def __call__(self, audio: np.ndarray | Any, **kwargs) -> np.ndarray | Any:
+    def __call__(self, audio: np.ndarray | Any, log: bool = False, **kwargs):
         """Apply augmentations sequentially.
 
         Args:
             audio: Input audio.
+            log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to each augmentation.
 
         Returns:
-            Augmented audio.
+            If log=False: Augmented audio.
+            If log=True: Tuple of (augmented_audio, log_dict).
         """
         if not self.should_apply():
+            if log:
+                return audio, None
             return audio
 
         # Check if we need per_example mode
@@ -94,24 +98,54 @@ class Compose(BaseAugmentation):
             # Apply augmentations with independent randomization for each example
             batch_size = audio.shape[0]
             results = []
+            logs_per_example = [] if log else None
 
             for i in range(batch_size):
                 # Apply the full sequence to each example independently
                 result = audio[i]
-                for augmentation in self.augmentations:
+                example_transforms = {}
+
+                for name, augmentation in zip(
+                    self.augmentation_names, self.augmentations
+                ):
                     augmentation.randomize_parameters()
-                    result = augmentation(result, **kwargs)
+                    if log:
+                        result, aug_log = augmentation(result, log=True, **kwargs)
+                        # Only include in log if augmentation was applied
+                        if aug_log is not None:
+                            example_transforms[name] = aug_log
+                    else:
+                        result = augmentation(result, **kwargs)
+
                 results.append(result)
+                if log:
+                    logs_per_example.append(
+                        {"augmentation": "Compose", "transforms": example_transforms}
+                    )
 
             # Stack results back into batch
-            return np.stack(results, axis=0)
+            output = np.stack(results, axis=0)
+            if log:
+                return output, logs_per_example
+            return output
         else:
             # per_batch mode: apply same randomization to entire batch
             result = audio
-            for augmentation in self.augmentations:
-                augmentation.randomize_parameters()
-                result = augmentation(result, **kwargs)
+            transforms = {} if log else None
 
+            for name, augmentation in zip(self.augmentation_names, self.augmentations):
+                augmentation.randomize_parameters()
+                if log:
+                    result, aug_log = augmentation(result, log=True, **kwargs)
+                    # Only include in log if augmentation was applied
+                    if aug_log is not None:
+                        transforms[name] = aug_log
+                else:
+                    result = augmentation(result, **kwargs)
+
+            if log:
+                log_dict = {"augmentation": "Compose", "transforms": transforms}
+                return result, log_dict
             return result
 
     def to_config(self) -> Dict[str, Any]:
@@ -224,19 +258,21 @@ class OneOf(BaseAugmentation):
             total = sum(weight_list)
             self.weights = [w / total for w in weight_list]
 
-    def __call__(
-        self, audio: Union[np.ndarray, Any], **kwargs
-    ) -> Union[np.ndarray, Any]:
+    def __call__(self, audio: Union[np.ndarray, Any], log: bool = False, **kwargs):
         """Apply one randomly selected augmentation.
 
         Args:
             audio: Input audio.
+            log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to the selected augmentation.
 
         Returns:
-            Augmented audio.
+            If log=False: Augmented audio.
+            If log=True: Tuple of (augmented_audio, log_dict).
         """
         if not self.should_apply():
+            if log:
+                return audio, None
             return audio
 
         # Check if we need per_example mode
@@ -248,6 +284,7 @@ class OneOf(BaseAugmentation):
             # Apply different augmentation to each example in the batch
             batch_size = audio.shape[0]
             results = []
+            logs_per_example = [] if log else None
 
             for i in range(batch_size):
                 # Select one augmentation for this example
@@ -257,14 +294,30 @@ class OneOf(BaseAugmentation):
                     idx = np.random.choice(len(self.augmentations), p=self.weights)
 
                 selected = self.augmentations[idx]
+                selected_name = self.augmentation_names[idx]
                 selected.randomize_parameters()
                 # Apply to single example
                 example = audio[i]
-                result = selected(example, **kwargs)
+
+                if log:
+                    result, aug_log = selected(example, log=True, **kwargs)
+                    logs_per_example.append(
+                        {
+                            "augmentation": "OneOf",
+                            "selected": selected_name,
+                            "transform": aug_log,
+                        }
+                    )
+                else:
+                    result = selected(example, **kwargs)
+
                 results.append(result)
 
             # Stack results back into batch
-            return np.stack(results, axis=0)
+            output = np.stack(results, axis=0)
+            if log:
+                return output, logs_per_example
+            return output
         else:
             # per_batch mode: apply same augmentation to entire batch
             if self.weights is None:
@@ -273,7 +326,17 @@ class OneOf(BaseAugmentation):
                 idx = np.random.choice(len(self.augmentations), p=self.weights)
 
             selected = self.augmentations[idx]
+            selected_name = self.augmentation_names[idx]
             selected.randomize_parameters()
+
+            if log:
+                result, aug_log = selected(audio, log=True, **kwargs)
+                log_dict = {
+                    "augmentation": "OneOf",
+                    "selected": selected_name,
+                    "transform": aug_log,
+                }
+                return result, log_dict
             return selected(audio, **kwargs)
 
     def to_config(self) -> Dict[str, Any]:
@@ -381,17 +444,21 @@ class SomeOf(BaseAugmentation):
                     f"for augmentation '{name}'"
                 )
 
-    def __call__(self, audio: np.ndarray | Any, **kwargs) -> np.ndarray | Any:
+    def __call__(self, audio: np.ndarray | Any, log: bool = False, **kwargs):
         """Apply k randomly selected augmentations.
 
         Args:
             audio: Input audio.
+            log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to each augmentation.
 
         Returns:
-            Augmented audio.
+            If log=False: Augmented audio.
+            If log=True: Tuple of (augmented_audio, log_dict).
         """
         if not self.should_apply():
+            if log:
+                return audio, None
             return audio
 
         # Check if we need per_example mode
@@ -403,6 +470,7 @@ class SomeOf(BaseAugmentation):
             # Apply different k augmentations to each example in the batch
             batch_size = audio.shape[0]
             results = []
+            logs_per_example = [] if log else None
 
             for i in range(batch_size):
                 # Determine how many augmentations to apply for this example
@@ -413,6 +481,10 @@ class SomeOf(BaseAugmentation):
 
                 if k == 0:
                     results.append(audio[i])
+                    if log:
+                        logs_per_example.append(
+                            {"augmentation": "SomeOf", "selected": [], "transforms": {}}
+                        )
                     continue
 
                 # Select k augmentations for this example
@@ -427,15 +499,36 @@ class SomeOf(BaseAugmentation):
 
                 # Apply selected augmentations sequentially to this example
                 result = audio[i]
+                selected_names = []
+                transforms = {} if log else None
+
                 for idx in indices:
                     selected = self.augmentations[idx]
+                    selected_name = self.augmentation_names[idx]
                     selected.randomize_parameters()
-                    result = selected(result, **kwargs)
+
+                    if log:
+                        result, aug_log = selected(result, log=True, **kwargs)
+                        selected_names.append(selected_name)
+                        transforms[selected_name] = aug_log
+                    else:
+                        result = selected(result, **kwargs)
 
                 results.append(result)
+                if log:
+                    logs_per_example.append(
+                        {
+                            "augmentation": "SomeOf",
+                            "selected": selected_names,
+                            "transforms": transforms,
+                        }
+                    )
 
             # Stack results back into batch
-            return np.stack(results, axis=0)
+            output = np.stack(results, axis=0)
+            if log:
+                return output, logs_per_example
+            return output
         else:
             # per_batch mode: apply same k augmentations to entire batch
             # Determine how many augmentations to apply
@@ -445,6 +538,12 @@ class SomeOf(BaseAugmentation):
                 k = np.random.randint(self.k_min, self.k_max + 1)
 
             if k == 0:
+                if log:
+                    return audio, {
+                        "augmentation": "SomeOf",
+                        "selected": [],
+                        "transforms": {},
+                    }
                 return audio
 
             # Select k augmentations
@@ -459,11 +558,28 @@ class SomeOf(BaseAugmentation):
 
             # Apply selected augmentations sequentially
             result = audio
+            selected_names = [] if log else None
+            transforms = {} if log else None
+
             for idx in indices:
                 selected = self.augmentations[idx]
+                selected_name = self.augmentation_names[idx]
                 selected.randomize_parameters()
-                result = selected(result, **kwargs)
 
+                if log:
+                    result, aug_log = selected(result, log=True, **kwargs)
+                    selected_names.append(selected_name)
+                    transforms[selected_name] = aug_log
+                else:
+                    result = selected(result, **kwargs)
+
+            if log:
+                log_dict = {
+                    "augmentation": "SomeOf",
+                    "selected": selected_names,
+                    "transforms": transforms,
+                }
+                return result, log_dict
             return result
 
     def to_config(self) -> Dict[str, Any]:

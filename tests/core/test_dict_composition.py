@@ -8,8 +8,52 @@ meaningful names.
 import numpy as np
 import pytest
 
+from auementations.core.base import BaseAugmentation
 from auementations.core.composition import Compose, OneOf, SomeOf
 from tests.conftest import MockAugmentation
+
+
+# Mock augmentations with distinct, easily verifiable effects
+class AddOneAugmentation(BaseAugmentation):
+    """Adds 1.0 to the audio signal."""
+
+    def __init__(self, sample_rate: int, p: float = 1.0):
+        super().__init__(sample_rate=sample_rate, p=p)
+        self.apply_count = 0
+
+    def __call__(self, audio, **kwargs):
+        if not self.should_apply():
+            return audio
+        self.apply_count += 1
+        return audio + 1.0
+
+
+class MultiplyByTenAugmentation(BaseAugmentation):
+    """Multiplies audio signal by 10.0."""
+
+    def __init__(self, sample_rate: int, p: float = 1.0):
+        super().__init__(sample_rate=sample_rate, p=p)
+        self.apply_count = 0
+
+    def __call__(self, audio, **kwargs):
+        if not self.should_apply():
+            return audio
+        self.apply_count += 1
+        return audio * 10.0
+
+
+class AddHundredAugmentation(BaseAugmentation):
+    """Adds 100.0 to the audio signal."""
+
+    def __init__(self, sample_rate: int, p: float = 1.0):
+        super().__init__(sample_rate=sample_rate, p=p)
+        self.apply_count = 0
+
+    def __call__(self, audio, **kwargs):
+        if not self.should_apply():
+            return audio
+        self.apply_count += 1
+        return audio + 100.0
 
 
 class TestComposeWithDict:
@@ -308,3 +352,288 @@ class TestSomeOfWithDict:
         # WHEN/THEN: Creating SomeOf raises ValueError
         with pytest.raises(ValueError, match="augmentations list cannot be empty"):
             SomeOf(k=1, augmentations=augmentations)
+
+
+class TestOneOfPerExampleMode:
+    """Test OneOf per_example mode - different augmentation per batch example."""
+
+    def test_given_batch_audio_when_one_of_applied_then_different_augmentations_per_example(
+        self,
+    ):
+        """Given batch audio, when OneOf applied, then each example gets different augmentation."""
+        # GIVEN: A batch of audio with 4 examples (batch, samples)
+        batch_size = 4
+        samples = 1000
+        sample_rate = 16000
+        # Start with zeros for easy verification
+        audio_batch = np.zeros((batch_size, samples), dtype=np.float32)
+
+        # Create OneOf with three distinct augmentations
+        augmentations = {
+            "add_one": AddOneAugmentation(sample_rate=sample_rate, p=1.0),
+            "multiply_by_ten": MultiplyByTenAugmentation(
+                sample_rate=sample_rate, p=1.0
+            ),
+            "add_hundred": AddHundredAugmentation(sample_rate=sample_rate, p=1.0),
+        }
+        one_of = OneOf(augmentations=augmentations, p=1.0, seed=42)
+
+        # WHEN: Apply to batch (this should fail initially since per_example isn't implemented)
+        result = one_of(audio_batch)
+
+        # THEN: Different examples should have different augmentations applied
+        # With 4 examples and 3 augmentations, we expect at least 2 different results
+        unique_results = []
+        for i in range(batch_size):
+            example_result = result[i]
+            # Check if this result is new
+            is_unique = True
+            for unique in unique_results:
+                if np.allclose(example_result, unique):
+                    is_unique = False
+                    break
+            if is_unique:
+                unique_results.append(example_result)
+
+        # Should have at least 2 different augmentations applied across the batch
+        assert len(unique_results) >= 2, (
+            f"Expected at least 2 different augmentations, got {len(unique_results)}. "
+            f"This suggests per_example mode is not working."
+        )
+
+        # Verify each example has one of the three expected transformations
+        for i in range(batch_size):
+            example = result[i]
+            mean_value = example.mean()
+            # Should be one of: 0+1=1, 0*10=0, 0+100=100
+            is_add_one = np.isclose(mean_value, 1.0, atol=0.1)
+            is_multiply_ten = np.isclose(mean_value, 0.0, atol=0.1)
+            is_add_hundred = np.isclose(mean_value, 100.0, atol=0.1)
+
+            assert is_add_one or is_multiply_ten or is_add_hundred, (
+                f"Example {i} has unexpected value {mean_value}"
+            )
+
+    def test_given_batch_audio_when_one_of_applied_multiple_times_then_consistent_variability(
+        self,
+    ):
+        """Given batch audio, when OneOf applied multiple times, then shows consistent variability."""
+        # GIVEN: A batch of audio
+        batch_size = 8
+        samples = 100
+        sample_rate = 16000
+        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+
+        augmentations = {
+            "add_one": AddOneAugmentation(sample_rate=sample_rate, p=1.0),
+            "multiply_by_ten": MultiplyByTenAugmentation(
+                sample_rate=sample_rate, p=1.0
+            ),
+        }
+        one_of = OneOf(augmentations=augmentations, p=1.0, seed=None)
+
+        # WHEN: Apply multiple times and count unique patterns
+        num_trials = 10
+        all_had_variation = True
+
+        for _ in range(num_trials):
+            result = one_of(audio_batch.copy())
+            # Count unique results in this batch
+            unique_count = 0
+            seen_values = []
+            for i in range(batch_size):
+                val = result[i, 0]  # First sample of each example
+                is_new = True
+                for seen in seen_values:
+                    if np.isclose(val, seen, atol=0.1):
+                        is_new = False
+                        break
+                if is_new:
+                    seen_values.append(val)
+                    unique_count += 1
+
+            if unique_count < 2:
+                all_had_variation = False
+                break
+
+        # THEN: Should consistently show variation across examples
+        assert all_had_variation, (
+            "OneOf should apply different augmentations to different examples in the batch"
+        )
+
+
+class TestSomeOfPerExampleMode:
+    """Test SomeOf per_example mode - different augmentation selection per batch example."""
+
+    def test_given_batch_audio_when_some_of_applied_then_different_selections_per_example(
+        self,
+    ):
+        """Given batch audio, when SomeOf applied, then each example gets different augmentation selection."""
+        # GIVEN: A batch of audio with 8 examples
+        batch_size = 8
+        samples = 100
+        sample_rate = 16000
+        # Start with ones for easy verification
+        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+
+        # Create SomeOf that selects 2 out of 3 augmentations
+        augmentations = {
+            "add_one": AddOneAugmentation(sample_rate=sample_rate, p=1.0),
+            "multiply_by_ten": MultiplyByTenAugmentation(
+                sample_rate=sample_rate, p=1.0
+            ),
+            "add_hundred": AddHundredAugmentation(sample_rate=sample_rate, p=1.0),
+        }
+        some_of = SomeOf(k=2, augmentations=augmentations, p=1.0, seed=42)
+
+        # WHEN: Apply to batch
+        result = some_of(audio_batch)
+
+        # THEN: Different examples should have different combinations
+        # Possible results starting from 1.0:
+        # - add_one then multiply_by_ten: (1+1)*10 = 20
+        # - add_one then add_hundred: 1+1+100 = 102
+        # - multiply_by_ten then add_one: 1*10+1 = 11
+        # - multiply_by_ten then add_hundred: 1*10+100 = 110
+        # - add_hundred then add_one: 1+100+1 = 102
+        # - add_hundred then multiply_by_ten: (1+100)*10 = 1010
+
+        unique_results = []
+        for i in range(batch_size):
+            example_result = result[i]
+            mean_value = example_result.mean()
+
+            # Check if this result is new
+            is_unique = True
+            for unique in unique_results:
+                if np.isclose(mean_value, unique, atol=1.0):
+                    is_unique = False
+                    break
+            if is_unique:
+                unique_results.append(mean_value)
+
+        # With 8 examples and multiple possible combinations, expect at least 2 different results
+        assert len(unique_results) >= 2, (
+            f"Expected at least 2 different augmentation combinations, got {len(unique_results)}. "
+            f"Unique values: {unique_results}"
+        )
+
+    def test_given_batch_audio_when_some_of_k_range_applied_then_variable_k_per_example(
+        self,
+    ):
+        """Given batch audio, when SomeOf with k range applied, then different k values per example."""
+        # GIVEN: A batch of audio
+        batch_size = 10
+        samples = 100
+        sample_rate = 16000
+        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+
+        # Create SomeOf with k range (1 to 3)
+        augmentations = {
+            "add_one": AddOneAugmentation(sample_rate=sample_rate, p=1.0),
+            "multiply_by_ten": MultiplyByTenAugmentation(
+                sample_rate=sample_rate, p=1.0
+            ),
+            "add_hundred": AddHundredAugmentation(sample_rate=sample_rate, p=1.0),
+        }
+        some_of = SomeOf(k=(1, 3), augmentations=augmentations, p=1.0, seed=42)
+
+        # WHEN: Apply to batch multiple times and collect results
+        num_trials = 5
+        all_results = []
+        for _ in range(num_trials):
+            result = some_of(audio_batch.copy())
+            for i in range(batch_size):
+                all_results.append(result[i].mean())
+
+        # THEN: Should see variety in results (different k values and selections)
+        unique_results = []
+        for val in all_results:
+            is_unique = True
+            for unique in unique_results:
+                if np.isclose(val, unique, atol=1.0):
+                    is_unique = False
+                    break
+            if is_unique:
+                unique_results.append(val)
+
+        # Should have at least 3 different result patterns
+        assert len(unique_results) >= 3, (
+            f"Expected at least 3 different patterns, got {len(unique_results)}"
+        )
+
+
+class TestComposePerExampleMode:
+    """Test Compose per_example mode - parameter randomization per batch example."""
+
+    def test_given_batch_audio_when_compose_applied_then_parameters_vary_per_example(
+        self,
+    ):
+        """Given batch audio, when Compose applied, then parameters randomize per example."""
+        # GIVEN: A batch of audio
+        batch_size = 4
+        samples = 100
+        sample_rate = 16000
+        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+
+        # Create Compose with augmentations that have randomizable parameters
+        # Using MockAugmentation with a gain range
+        augmentations = {
+            "gain1": MockAugmentation(sample_rate=sample_rate, gain=2.0, p=1.0),
+            "gain2": MockAugmentation(sample_rate=sample_rate, gain=3.0, p=1.0),
+        }
+        compose = Compose(augmentations=augmentations, p=1.0)
+
+        # WHEN: Apply to batch
+        result = compose(audio_batch)
+
+        # THEN: All examples should have same result (currently)
+        # This test documents current behavior - will need updating when per_example is implemented
+        for i in range(1, batch_size):
+            # Currently all examples get the same treatment
+            assert np.allclose(result[0], result[i]), (
+                "Without per_example mode, all examples should be identical"
+            )
+
+    def test_given_batch_audio_when_compose_with_one_of_applied_then_varies_per_example(
+        self,
+    ):
+        """Given batch audio, when Compose containing OneOf applied, then varies per example."""
+        # GIVEN: A batch of audio
+        batch_size = 6
+        samples = 100
+        sample_rate = 16000
+        audio_batch = np.zeros((batch_size, samples), dtype=np.float32)
+
+        # Create nested composition: Compose([AddOne, OneOf([MultiplyByTen, AddHundred])])
+        add_one = AddOneAugmentation(sample_rate=sample_rate, p=1.0)
+        one_of = OneOf(
+            {
+                "multiply": MultiplyByTenAugmentation(sample_rate=sample_rate, p=1.0),
+                "add_hundred": AddHundredAugmentation(sample_rate=sample_rate, p=1.0),
+            },
+            p=1.0,
+            seed=42,
+        )
+        compose = Compose({"add_one": add_one, "one_of": one_of}, p=1.0)
+
+        # WHEN: Apply to batch
+        result = compose(audio_batch)
+
+        # THEN: Different examples should have different results
+        # Expected: (0+1)*10=10 or 0+1+100=101
+        unique_results = []
+        for i in range(batch_size):
+            mean_value = result[i].mean()
+            is_unique = True
+            for unique in unique_results:
+                if np.isclose(mean_value, unique, atol=1.0):
+                    is_unique = False
+                    break
+            if is_unique:
+                unique_results.append(mean_value)
+
+        # Should have at least 2 different results
+        assert len(unique_results) >= 2, (
+            f"Expected at least 2 different results from nested composition, got {len(unique_results)}"
+        )

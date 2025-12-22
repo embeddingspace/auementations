@@ -23,11 +23,14 @@ class Compose(BaseAugmentation):
         >>> augmented = compose(audio)
     """
 
+    VALID_MODES = ["per_batch", "per_example"]
+
     def __init__(
         self,
         augmentations: dict[str, BaseAugmentation],
         sample_rate: int | float | None = None,
         p: float = 1.0,
+        mode: str = "per_example",
         seed: Optional[int] = None,
     ):
         """Initialize sequential composition.
@@ -37,10 +40,15 @@ class Compose(BaseAugmentation):
                           If dict, preserves insertion order (like OrderedDict in Python 3.7+).
             sample_rate: Sample rate. If None, inferred from first augmentation.
             p: Probability of applying the entire composition.
+            mode: Composition mode - "per_example" (independent randomization per batch example) or "per_batch" (same randomization for all).
             seed: Random seed for reproducibility.
         """
         if not augmentations:
             raise ValueError("augmentations list cannot be empty")
+
+        # Validate mode
+        if mode not in self.VALID_MODES:
+            raise ValueError(f"mode must be one of {self.VALID_MODES}, got '{mode}'")
 
         # Convert dict to list while preserving order and store names
         self.augmentation_names = list(augmentations.keys())
@@ -52,6 +60,7 @@ class Compose(BaseAugmentation):
 
         super().__init__(sample_rate=sample_rate, p=p, seed=seed)
         self.augmentations = aug_list
+        self.mode = mode
 
         # Validate that all augmentations have compatible sample rates
         for i, aug in enumerate(aug_list):
@@ -76,17 +85,40 @@ class Compose(BaseAugmentation):
         if not self.should_apply():
             return audio
 
-        result = audio
-        for augmentation in self.augmentations:
-            augmentation.randomize_parameters()
-            result = augmentation(result, **kwargs)
+        # Check if we need per_example mode
+        if (
+            self.mode == "per_example"
+            and isinstance(audio, np.ndarray)
+            and audio.ndim >= 2
+        ):
+            # Apply augmentations with independent randomization for each example
+            batch_size = audio.shape[0]
+            results = []
 
-        return result
+            for i in range(batch_size):
+                # Apply the full sequence to each example independently
+                result = audio[i]
+                for augmentation in self.augmentations:
+                    augmentation.randomize_parameters()
+                    result = augmentation(result, **kwargs)
+                results.append(result)
+
+            # Stack results back into batch
+            return np.stack(results, axis=0)
+        else:
+            # per_batch mode: apply same randomization to entire batch
+            result = audio
+            for augmentation in self.augmentations:
+                augmentation.randomize_parameters()
+                result = augmentation(result, **kwargs)
+
+            return result
 
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
         config = super().to_config()
         config["augmentations"] = [aug.to_config() for aug in self.augmentations]
+        config["mode"] = self.mode
         return config
 
     def __repr__(self) -> str:
@@ -119,12 +151,15 @@ class OneOf(BaseAugmentation):
         >>> augmented = one_of(audio)  # Applies exactly one
     """
 
+    VALID_MODES = ["per_batch", "per_example"]
+
     def __init__(
         self,
         augmentations: dict[str, BaseAugmentation],
         weights: Optional[Union[List[float], Dict[str, float]]] = None,
         sample_rate: int | float | None = None,
         p: float = 1.0,
+        mode: str = "per_example",
         seed: Optional[int] = None,
     ):
         """Initialize OneOf composition.
@@ -136,10 +171,15 @@ class OneOf(BaseAugmentation):
                     Can be a list (matching augmentation order) or dict (matching augmentation names).
             sample_rate: Sample rate. If None, inferred from first augmentation.
             p: Probability of applying any augmentation (if False, returns input unchanged).
+            mode: Composition mode - "per_example" (different aug per batch example) or "per_batch" (same aug for all).
             seed: Random seed for reproducibility.
         """
         if not augmentations:
             raise ValueError("augmentations list cannot be empty")
+
+        # Validate mode
+        if mode not in self.VALID_MODES:
+            raise ValueError(f"mode must be one of {self.VALID_MODES}, got '{mode}'")
 
         # Convert dict to list while preserving order and store names
         self.augmentation_names = list(augmentations.keys())
@@ -150,6 +190,7 @@ class OneOf(BaseAugmentation):
 
         super().__init__(sample_rate=sample_rate, p=p, seed=seed)
         self.augmentations = aug_list
+        self.mode = mode
 
         # Validate sample rates
         for i, aug in enumerate(aug_list):
@@ -198,20 +239,48 @@ class OneOf(BaseAugmentation):
         if not self.should_apply():
             return audio
 
-        # Select one augmentation
-        if self.weights is None:
-            idx = np.random.randint(0, len(self.augmentations))
-        else:
-            idx = np.random.choice(len(self.augmentations), p=self.weights)
+        # Check if we need per_example mode
+        if (
+            self.mode == "per_example"
+            and isinstance(audio, np.ndarray)
+            and audio.ndim >= 2
+        ):
+            # Apply different augmentation to each example in the batch
+            batch_size = audio.shape[0]
+            results = []
 
-        selected = self.augmentations[idx]
-        selected.randomize_parameters()
-        return selected(audio, **kwargs)
+            for i in range(batch_size):
+                # Select one augmentation for this example
+                if self.weights is None:
+                    idx = np.random.randint(0, len(self.augmentations))
+                else:
+                    idx = np.random.choice(len(self.augmentations), p=self.weights)
+
+                selected = self.augmentations[idx]
+                selected.randomize_parameters()
+                # Apply to single example
+                example = audio[i]
+                result = selected(example, **kwargs)
+                results.append(result)
+
+            # Stack results back into batch
+            return np.stack(results, axis=0)
+        else:
+            # per_batch mode: apply same augmentation to entire batch
+            if self.weights is None:
+                idx = np.random.randint(0, len(self.augmentations))
+            else:
+                idx = np.random.choice(len(self.augmentations), p=self.weights)
+
+            selected = self.augmentations[idx]
+            selected.randomize_parameters()
+            return selected(audio, **kwargs)
 
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
         config = super().to_config()
         config["augmentations"] = [aug.to_config() for aug in self.augmentations]
+        config["mode"] = self.mode
         if self.weights is not None:
             config["weights"] = self.weights
         return config
@@ -235,6 +304,8 @@ class SomeOf(BaseAugmentation):
         >>> augmented = some_of(audio)  # Applies exactly 2 random augmentations
     """
 
+    VALID_MODES = ["per_batch", "per_example"]
+
     def __init__(
         self,
         k: Union[int, tuple],
@@ -242,6 +313,7 @@ class SomeOf(BaseAugmentation):
         replace: bool = False,
         sample_rate: int | float | None = None,
         p: float = 1.0,
+        mode: str = "per_example",
         seed: Optional[int] = None,
     ):
         """Initialize SomeOf composition.
@@ -255,10 +327,15 @@ class SomeOf(BaseAugmentation):
             replace: If True, same augmentation can be selected multiple times.
             sample_rate: Sample rate. If None, inferred from first augmentation.
             p: Probability of applying the composition.
+            mode: Composition mode - "per_example" (different selection per batch example) or "per_batch" (same selection for all).
             seed: Random seed for reproducibility.
         """
         if not augmentations:
             raise ValueError("augmentations list cannot be empty")
+
+        # Validate mode
+        if mode not in self.VALID_MODES:
+            raise ValueError(f"mode must be one of {self.VALID_MODES}, got '{mode}'")
 
         # Convert dict to list while preserving order and store names
         self.augmentation_names = list(augmentations.keys())
@@ -270,6 +347,7 @@ class SomeOf(BaseAugmentation):
         super().__init__(sample_rate=sample_rate, p=p, seed=seed)
         self.augmentations = aug_list
         self.replace = replace
+        self.mode = mode
 
         # Validate k
         if isinstance(k, int):
@@ -316,29 +394,77 @@ class SomeOf(BaseAugmentation):
         if not self.should_apply():
             return audio
 
-        # Determine how many augmentations to apply
-        if self.k_min == self.k_max:
-            k = self.k_min
+        # Check if we need per_example mode
+        if (
+            self.mode == "per_example"
+            and isinstance(audio, np.ndarray)
+            and audio.ndim >= 2
+        ):
+            # Apply different k augmentations to each example in the batch
+            batch_size = audio.shape[0]
+            results = []
+
+            for i in range(batch_size):
+                # Determine how many augmentations to apply for this example
+                if self.k_min == self.k_max:
+                    k = self.k_min
+                else:
+                    k = np.random.randint(self.k_min, self.k_max + 1)
+
+                if k == 0:
+                    results.append(audio[i])
+                    continue
+
+                # Select k augmentations for this example
+                if self.replace:
+                    indices = np.random.choice(
+                        len(self.augmentations), size=k, replace=True
+                    )
+                else:
+                    indices = np.random.choice(
+                        len(self.augmentations), size=k, replace=False
+                    )
+
+                # Apply selected augmentations sequentially to this example
+                result = audio[i]
+                for idx in indices:
+                    selected = self.augmentations[idx]
+                    selected.randomize_parameters()
+                    result = selected(result, **kwargs)
+
+                results.append(result)
+
+            # Stack results back into batch
+            return np.stack(results, axis=0)
         else:
-            k = np.random.randint(self.k_min, self.k_max + 1)
+            # per_batch mode: apply same k augmentations to entire batch
+            # Determine how many augmentations to apply
+            if self.k_min == self.k_max:
+                k = self.k_min
+            else:
+                k = np.random.randint(self.k_min, self.k_max + 1)
 
-        if k == 0:
-            return audio
+            if k == 0:
+                return audio
 
-        # Select k augmentations
-        if self.replace:
-            indices = np.random.choice(len(self.augmentations), size=k, replace=True)
-        else:
-            indices = np.random.choice(len(self.augmentations), size=k, replace=False)
+            # Select k augmentations
+            if self.replace:
+                indices = np.random.choice(
+                    len(self.augmentations), size=k, replace=True
+                )
+            else:
+                indices = np.random.choice(
+                    len(self.augmentations), size=k, replace=False
+                )
 
-        # Apply selected augmentations sequentially
-        result = audio
-        for idx in indices:
-            selected = self.augmentations[idx]
-            selected.randomize_parameters()
-            result = selected(result, **kwargs)
+            # Apply selected augmentations sequentially
+            result = audio
+            for idx in indices:
+                selected = self.augmentations[idx]
+                selected.randomize_parameters()
+                result = selected(result, **kwargs)
 
-        return result
+            return result
 
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
@@ -348,6 +474,7 @@ class SomeOf(BaseAugmentation):
         )
         config["augmentations"] = [aug.to_config() for aug in self.augmentations]
         config["replace"] = self.replace
+        config["mode"] = self.mode
         return config
 
 

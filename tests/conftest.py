@@ -1,6 +1,5 @@
 """Pytest configuration and shared fixtures."""
 
-import numpy as np
 import pytest
 import torch
 
@@ -41,33 +40,38 @@ def sample_rate():
 
 @pytest.fixture
 def mono_audio():
-    """Generate mono audio signal (1D array)."""
+    """Generate mono audio signal as torch tensor with shape (source, channel, time)."""
     duration = 1.0  # seconds
     sample_rate = 16000
     num_samples = int(duration * sample_rate)
     # Generate a simple sine wave
-    t = np.linspace(0, duration, num_samples)
+    t = torch.linspace(0, duration, num_samples)
     frequency = 440.0  # Hz (A4 note)
-    audio = np.sin(2 * np.pi * frequency * t).astype(np.float32)
-    return audio
+    audio = torch.sin(2 * torch.pi * frequency * t).to(torch.float32)
+    # Shape: (1 source, 1 channel, num_samples time)
+    return audio.unsqueeze(0).unsqueeze(0)
 
 
 @pytest.fixture
 def mono_audio_with_batch(mono_audio):
-    return torch.tensor(mono_audio).unsqueeze(0)
+    """Generate batch of mono audio with shape (batch, source, channel, time)."""
+    # mono_audio is (1, 1, time), add batch dimension
+    return mono_audio.unsqueeze(0)
 
 
 @pytest.fixture
 def stereo_audio():
-    """Generate stereo audio signal (2D array)."""
+    """Generate stereo audio signal as torch tensor with shape (source, channel, time)."""
     duration = 1.0  # seconds
     sample_rate = 16000
     num_samples = int(duration * sample_rate)
     # Generate two slightly different sine waves
-    t = np.linspace(0, duration, num_samples)
-    left = np.sin(2 * np.pi * 440.0 * t).astype(np.float32)
-    right = np.sin(2 * np.pi * 445.0 * t).astype(np.float32)
-    return np.stack([left, right])
+    t = torch.linspace(0, duration, num_samples)
+    left = torch.sin(2 * torch.pi * 440.0 * t).to(torch.float32)
+    right = torch.sin(2 * torch.pi * 445.0 * t).to(torch.float32)
+    # Shape: (1 source, 2 channels, num_samples time)
+    stereo = torch.stack([left, right], dim=0)  # (2, time)
+    return stereo.unsqueeze(0)  # (1, 2, time)
 
 
 @pytest.fixture

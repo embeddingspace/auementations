@@ -5,8 +5,8 @@ dictionaries of augmentations, which is better for structured configs and provid
 meaningful names.
 """
 
-import numpy as np
 import pytest
+import torch
 
 from auementations.core.base import BaseAugmentation
 from auementations.core.composition import Compose, OneOf, SomeOf
@@ -83,14 +83,15 @@ class TestComposeWithDict:
             "multiply_by_3": MockAugmentation(sample_rate=16000, gain=3.0),
         }
         compose = Compose(augmentations=augmentations, p=1.0)
-        audio = np.ones(16000, dtype=np.float32)
+        # Shape: (1 source, 1 channel, 16000 time)
+        audio = torch.ones(1, 1, 16000, dtype=torch.float32)
 
         # WHEN: Apply composition
         result = compose(audio)
 
         # THEN: Augmentations applied in order (2.0 * 3.0 = 6.0)
         expected = audio * 2.0 * 3.0
-        assert np.allclose(result, expected)
+        assert torch.allclose(result, expected)
 
     def test_given_dict_augmentations_when_repr_called_then_shows_names(self):
         """Given dict augmentations, when repr called, then shows augmentation names."""
@@ -178,16 +179,21 @@ class TestOneOfWithDict:
             "quadruple": MockAugmentation(sample_rate=16000, gain=4.0),
         }
         one_of = OneOf(augmentations=augmentations, p=1.0, seed=42)
-        audio = np.ones(16000, dtype=np.float32)
+        # Shape: (1 source, 1 channel, 16000 time)
+        audio = torch.ones(1, 1, 16000, dtype=torch.float32)
 
         # WHEN: Apply multiple times
-        results = [one_of(audio.copy()) for _ in range(10)]
+        results = [one_of(audio.clone()) for _ in range(10)]
 
         # THEN: Each result is one of the expected values
         expected_values = [2.0, 3.0, 4.0]
         for result in results:
-            result_value = result[0]  # Get the scalar value
-            assert any(np.isclose(result_value, v) for v in expected_values)
+            result_value = result[
+                0, 0, 0
+            ]  # Get the scalar value from (source, channel, time)
+            assert any(
+                torch.isclose(result_value, torch.tensor(v)) for v in expected_values
+            )
 
     def test_given_dict_with_dict_weights_when_one_of_created_then_applies_weights(
         self,
@@ -205,14 +211,15 @@ class TestOneOfWithDict:
 
         # WHEN: Create OneOf with dict weights
         one_of = OneOf(augmentations=augmentations, weights=weights, p=1.0, seed=42)
-        audio = np.ones(100, dtype=np.float32)
+        # Shape: (1 source, 1 channel, 100 time)
+        audio = torch.ones(1, 1, 100, dtype=torch.float32)
 
         # Apply many times and count
         high_count = 0
         low_count = 0
         for _ in range(100):
-            result = one_of(audio.copy())
-            if np.isclose(result[0], 10.0):
+            result = one_of(audio.clone())
+            if torch.isclose(result[0, 0, 0], torch.tensor(10.0)):
                 high_count += 1
             else:
                 low_count += 1
@@ -276,15 +283,16 @@ class TestSomeOfWithDict:
             "aug4": MockAugmentation(sample_rate=16000, gain=1.1),
         }
         some_of = SomeOf(k=2, augmentations=augmentations, p=1.0, seed=42)
-        audio = np.ones(100, dtype=np.float32)
+        # Shape: (1 source, 1 channel, 100 time)
+        audio = torch.ones(1, 1, 100, dtype=torch.float32)
 
         # WHEN: Apply augmentation
         result = some_of(audio)
 
         # THEN: Result is modified (2 augmentations applied)
-        assert not np.array_equal(result, audio)
+        assert not torch.equal(result, audio)
         # Result should be product of 2 gains
-        assert result[0] > 1.0
+        assert result[0, 0, 0] > 1.0
 
     def test_given_dict_with_k_greater_than_length_when_some_of_created_then_raises_error(
         self,
@@ -310,17 +318,18 @@ class TestSomeOfWithDict:
             "aug3": MockAugmentation(sample_rate=16000, gain=1.1),
         }
         some_of = SomeOf(k=(1, 3), augmentations=augmentations, p=1.0, seed=42)
-        audio = np.ones(100, dtype=np.float32)
+        # Shape: (1 source, 1 channel, 100 time)
+        audio = torch.ones(1, 1, 100, dtype=torch.float32)
 
         # WHEN: Apply multiple times
-        results = [some_of(audio.copy()) for _ in range(20)]
+        results = [some_of(audio.clone()) for _ in range(20)]
 
         # THEN: Results vary (different k values applied)
         unique_results = []
         for result in results:
             is_unique = True
             for unique in unique_results:
-                if np.allclose(result, unique, atol=1e-6):
+                if torch.allclose(result, unique, atol=1e-6):
                     is_unique = False
                     break
             if is_unique:
@@ -361,12 +370,13 @@ class TestOneOfPerExampleMode:
         self,
     ):
         """Given batch audio, when OneOf applied, then each example gets different augmentation."""
-        # GIVEN: A batch of audio with 4 examples (batch, samples)
+        # GIVEN: A batch of audio with 4 examples (batch, source, channel, time)
         batch_size = 4
         samples = 1000
         sample_rate = 16000
         # Start with zeros for easy verification
-        audio_batch = np.zeros((batch_size, samples), dtype=np.float32)
+        # Shape: (batch, 1 source, 1 channel, time)
+        audio_batch = torch.zeros(batch_size, 1, 1, samples, dtype=torch.float32)
 
         # Create OneOf with three distinct augmentations
         augmentations = {
@@ -389,7 +399,7 @@ class TestOneOfPerExampleMode:
             # Check if this result is new
             is_unique = True
             for unique in unique_results:
-                if np.allclose(example_result, unique):
+                if torch.allclose(example_result, unique):
                     is_unique = False
                     break
             if is_unique:
@@ -406,9 +416,9 @@ class TestOneOfPerExampleMode:
             example = result[i]
             mean_value = example.mean()
             # Should be one of: 0+1=1, 0*10=0, 0+100=100
-            is_add_one = np.isclose(mean_value, 1.0, atol=0.1)
-            is_multiply_ten = np.isclose(mean_value, 0.0, atol=0.1)
-            is_add_hundred = np.isclose(mean_value, 100.0, atol=0.1)
+            is_add_one = torch.isclose(mean_value, torch.tensor(1.0), atol=0.1)
+            is_multiply_ten = torch.isclose(mean_value, torch.tensor(0.0), atol=0.1)
+            is_add_hundred = torch.isclose(mean_value, torch.tensor(100.0), atol=0.1)
 
             assert is_add_one or is_multiply_ten or is_add_hundred, (
                 f"Example {i} has unexpected value {mean_value}"
@@ -418,11 +428,11 @@ class TestOneOfPerExampleMode:
         self,
     ):
         """Given batch audio, when OneOf applied multiple times, then shows consistent variability."""
-        # GIVEN: A batch of audio
+        # GIVEN: A batch of audio (batch, source, channel, time)
         batch_size = 8
         samples = 100
         sample_rate = 16000
-        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+        audio_batch = torch.ones(batch_size, 1, 1, samples, dtype=torch.float32)
 
         augmentations = {
             "add_one": AddOneAugmentation(sample_rate=sample_rate, p=1.0),
@@ -437,15 +447,17 @@ class TestOneOfPerExampleMode:
         all_had_variation = True
 
         for _ in range(num_trials):
-            result = one_of(audio_batch.copy())
+            result = one_of(audio_batch.clone())
             # Count unique results in this batch
             unique_count = 0
             seen_values = []
             for i in range(batch_size):
-                val = result[i, 0]  # First sample of each example
+                val = result[
+                    i, 0, 0, 0
+                ]  # First sample of each example (batch, source, channel, time)
                 is_new = True
                 for seen in seen_values:
-                    if np.isclose(val, seen, atol=0.1):
+                    if torch.isclose(val, seen, atol=0.1):
                         is_new = False
                         break
                 if is_new:
@@ -469,12 +481,12 @@ class TestSomeOfPerExampleMode:
         self,
     ):
         """Given batch audio, when SomeOf applied, then each example gets different augmentation selection."""
-        # GIVEN: A batch of audio with 8 examples
+        # GIVEN: A batch of audio with 8 examples (batch, source, channel, time)
         batch_size = 8
         samples = 100
         sample_rate = 16000
         # Start with ones for easy verification
-        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+        audio_batch = torch.ones(batch_size, 1, 1, samples, dtype=torch.float32)
 
         # Create SomeOf that selects 2 out of 3 augmentations
         augmentations = {
@@ -506,7 +518,7 @@ class TestSomeOfPerExampleMode:
             # Check if this result is new
             is_unique = True
             for unique in unique_results:
-                if np.isclose(mean_value, unique, atol=1.0):
+                if torch.isclose(mean_value, unique, atol=1.0):
                     is_unique = False
                     break
             if is_unique:
@@ -522,11 +534,11 @@ class TestSomeOfPerExampleMode:
         self,
     ):
         """Given batch audio, when SomeOf with k range applied, then different k values per example."""
-        # GIVEN: A batch of audio
+        # GIVEN: A batch of audio (batch, source, channel, time)
         batch_size = 10
         samples = 100
         sample_rate = 16000
-        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+        audio_batch = torch.ones(batch_size, 1, 1, samples, dtype=torch.float32)
 
         # Create SomeOf with k range (1 to 3)
         augmentations = {
@@ -542,7 +554,7 @@ class TestSomeOfPerExampleMode:
         num_trials = 5
         all_results = []
         for _ in range(num_trials):
-            result = some_of(audio_batch.copy())
+            result = some_of(audio_batch.clone())
             for i in range(batch_size):
                 all_results.append(result[i].mean())
 
@@ -551,7 +563,7 @@ class TestSomeOfPerExampleMode:
         for val in all_results:
             is_unique = True
             for unique in unique_results:
-                if np.isclose(val, unique, atol=1.0):
+                if torch.isclose(val, unique, atol=1.0):
                     is_unique = False
                     break
             if is_unique:
@@ -570,11 +582,11 @@ class TestComposePerExampleMode:
         self,
     ):
         """Given batch audio, when Compose applied, then parameters randomize per example."""
-        # GIVEN: A batch of audio
+        # GIVEN: A batch of audio (batch, source, channel, time)
         batch_size = 4
         samples = 100
         sample_rate = 16000
-        audio_batch = np.ones((batch_size, samples), dtype=np.float32)
+        audio_batch = torch.ones(batch_size, 1, 1, samples, dtype=torch.float32)
 
         # Create Compose with augmentations that have randomizable parameters
         # Using MockAugmentation with a gain range
@@ -582,7 +594,7 @@ class TestComposePerExampleMode:
             "gain1": MockAugmentation(sample_rate=sample_rate, gain=2.0, p=1.0),
             "gain2": MockAugmentation(sample_rate=sample_rate, gain=3.0, p=1.0),
         }
-        compose = Compose(augmentations=augmentations, p=1.0)
+        compose = Compose(augmentations=augmentations, p=1.0, mode="per_example")
 
         # WHEN: Apply to batch
         result = compose(audio_batch)
@@ -591,7 +603,7 @@ class TestComposePerExampleMode:
         # This test documents current behavior - will need updating when per_example is implemented
         for i in range(1, batch_size):
             # Currently all examples get the same treatment
-            assert np.allclose(result[0], result[i]), (
+            assert torch.allclose(result[0], result[i]), (
                 "Without per_example mode, all examples should be identical"
             )
 
@@ -599,11 +611,11 @@ class TestComposePerExampleMode:
         self,
     ):
         """Given batch audio, when Compose containing OneOf applied, then varies per example."""
-        # GIVEN: A batch of audio
+        # GIVEN: A batch of audio (batch, source, channel, time)
         batch_size = 6
         samples = 100
         sample_rate = 16000
-        audio_batch = np.zeros((batch_size, samples), dtype=np.float32)
+        audio_batch = torch.zeros(batch_size, 1, 1, samples, dtype=torch.float32)
 
         # Create nested composition: Compose([AddOne, OneOf([MultiplyByTen, AddHundred])])
         add_one = AddOneAugmentation(sample_rate=sample_rate, p=1.0)
@@ -615,7 +627,9 @@ class TestComposePerExampleMode:
             p=1.0,
             seed=42,
         )
-        compose = Compose({"add_one": add_one, "one_of": one_of}, p=1.0)
+        compose = Compose(
+            {"add_one": add_one, "one_of": one_of}, p=1.0, mode="per_example"
+        )
 
         # WHEN: Apply to batch
         result = compose(audio_batch)
@@ -627,7 +641,7 @@ class TestComposePerExampleMode:
             mean_value = result[i].mean()
             is_unique = True
             for unique in unique_results:
-                if np.isclose(mean_value, unique, atol=1.0):
+                if torch.isclose(mean_value, unique, atol=1.0):
                     is_unique = False
                     break
             if is_unique:

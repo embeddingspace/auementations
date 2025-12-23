@@ -1,7 +1,7 @@
 """BDD-style tests for composition functionality."""
 
-import numpy as np
 import pytest
+import torch
 
 from auementations.core.composition import Compose, OneOf, SomeOf
 from tests.conftest import MockAugmentation
@@ -19,7 +19,7 @@ class TestComposeSequentialApplication:
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
         compose = Compose({"a": aug1, "b": aug2})
 
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = compose(mono_audio)
@@ -27,7 +27,7 @@ class TestComposeSequentialApplication:
         # Then
         # Should apply aug1 first (x2), then aug2 (x3) -> total x6
         expected = original * 2.0 * 3.0
-        assert np.allclose(result, expected)
+        assert torch.allclose(result, expected)
 
     def test_given_empty_augmentation_list_when_composed_then_raises_error(self):
         """Given an empty augmentation list, when composed, then raises ValueError."""
@@ -68,13 +68,13 @@ class TestComposeSequentialApplication:
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
         compose = Compose({"a": aug1, "b": aug2}, p=0.0)
 
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = compose(mono_audio)
 
         # Then
-        assert np.array_equal(result, original)
+        assert torch.equal(result, original)
 
     def test_given_compose_when_exported_to_config_then_includes_all_augmentations(
         self, sample_rate
@@ -119,7 +119,7 @@ class TestOneOfRandomSelection:
     ):
         """Given multiple augmentations, when OneOf is applied, then applies exactly one."""
         # Given
-        np.random.seed(42)
+        torch.manual_seed(42)
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0, p=1.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0, p=1.0)
         aug3 = MockAugmentation(sample_rate=sample_rate, gain=4.0, p=1.0)
@@ -131,9 +131,9 @@ class TestOneOfRandomSelection:
         # Then
         # Should be one of 2x, 3x, or 4x the original
         original = mono_audio
-        is_aug1 = np.allclose(result, original * 2.0)
-        is_aug2 = np.allclose(result, original * 3.0)
-        is_aug3 = np.allclose(result, original * 4.0)
+        is_aug1 = torch.allclose(result, original * 2.0)
+        is_aug2 = torch.allclose(result, original * 3.0)
+        is_aug3 = torch.allclose(result, original * 4.0)
 
         assert is_aug1 or is_aug2 or is_aug3
         # Should apply exactly one (not multiple)
@@ -144,7 +144,7 @@ class TestOneOfRandomSelection:
     ):
         """Given weighted augmentations, when OneOf applied many times, then respects weights."""
         # Given
-        np.random.seed(42)
+        torch.manual_seed(42)
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
         # Give aug1 3x the weight of aug2
@@ -155,8 +155,8 @@ class TestOneOfRandomSelection:
 
         # When
         for _ in range(n_trials):
-            result = one_of(mono_audio.copy())
-            if np.allclose(result, mono_audio * 2.0):
+            result = one_of(mono_audio.clone())
+            if torch.allclose(result, mono_audio * 2.0):
                 aug1_count += 1
 
         # Then
@@ -210,7 +210,7 @@ class TestSomeOfRandomSelection:
     ):
         """Given k=2, when SomeOf is applied, then applies exactly 2 augmentations."""
         # Given
-        np.random.seed(42)
+        torch.manual_seed(42)
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=1.5)
         aug3 = MockAugmentation(sample_rate=sample_rate, gain=1.2)
@@ -226,14 +226,14 @@ class TestSomeOfRandomSelection:
         # Then
         # Result should be product of exactly 2 gain values
         # We can't predict which, but we can verify it's not original
-        assert not np.allclose(result, mono_audio)
+        assert not torch.allclose(result, mono_audio)
 
     def test_given_k_range_when_some_of_applied_then_applies_k_in_range(
         self, mono_audio, sample_rate
     ):
         """Given k as range, when SomeOf applied, then applies k augmentations within range."""
         # Given
-        np.random.seed(42)
+        torch.manual_seed(42)
         augmentations = {
             "a": MockAugmentation(sample_rate=sample_rate, gain=1.1),
             "b": MockAugmentation(sample_rate=sample_rate, gain=1.2),
@@ -249,7 +249,7 @@ class TestSomeOfRandomSelection:
 
         n_trials = 100
         for _ in range(n_trials):
-            some_of(mono_audio.copy())
+            some_of(mono_audio.clone())
 
         # Then
         # Total applications should be between 100 and 300 (1-3 per trial)
@@ -267,25 +267,25 @@ class TestSomeOfRandomSelection:
         aug2 = MockAugmentation(sample_rate=sample_rate, gain=3.0)
         some_of = SomeOf(k=0, augmentations={"a": aug1, "b": aug2})
 
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = some_of(mono_audio)
 
         # Then
-        assert np.array_equal(result, original)
+        assert torch.equal(result, original)
 
     def test_given_replace_true_when_some_of_applied_then_can_select_same_augmentation_twice(
         self, mono_audio, sample_rate
     ):
         """Given replace=True, when SomeOf applied, then can select same augmentation multiple times."""
         # Given
-        np.random.seed(42)
+        torch.manual_seed(42)
         aug1 = MockAugmentation(sample_rate=sample_rate, gain=2.0)
         # Only one augmentation, but k=3 with replacement
         some_of = SomeOf(k=3, augmentations={"a": aug1}, replace=True)
 
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = some_of(mono_audio)
@@ -293,7 +293,7 @@ class TestSomeOfRandomSelection:
         # Then
         # Should apply aug1 three times: 2.0^3 = 8.0
         expected = original * (2.0**3)
-        assert np.allclose(result, expected)
+        assert torch.allclose(result, expected)
 
     def test_given_k_greater_than_n_when_some_of_initialized_then_raises_error(
         self, sample_rate
@@ -356,7 +356,7 @@ class TestNestedComposition:
 
         compose = Compose({"a": fixed_aug, "b": one_of})
 
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = compose(mono_audio)
@@ -366,7 +366,7 @@ class TestNestedComposition:
         option1 = original * 2.0 * 1.5  # fixed then one_of_aug1
         option2 = original * 2.0 * 3.0  # fixed then one_of_aug2
 
-        is_option1 = np.allclose(result, option1)
-        is_option2 = np.allclose(result, option2)
+        is_option1 = torch.allclose(result, option1)
+        is_option2 = torch.allclose(result, option2)
 
         assert is_option1 or is_option2

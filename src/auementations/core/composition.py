@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
+import torch
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
@@ -72,11 +72,11 @@ class Compose(BaseAugmentation):
                     f"for augmentation '{name}' ({aug.__class__.__name__})"
                 )
 
-    def __call__(self, audio: np.ndarray | Any, log: bool = False, **kwargs):
+    def __call__(self, audio: torch.Tensor | Any, log: bool = False, **kwargs):
         """Apply augmentations sequentially.
 
         Args:
-            audio: Input audio.
+            audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
             log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to each augmentation.
 
@@ -89,19 +89,21 @@ class Compose(BaseAugmentation):
                 return audio, None
             return audio
 
-        # Check if we need per_example mode
+        # Check if we need per_example mode (batch dimension present)
         if (
             self.mode == "per_example"
-            and isinstance(audio, np.ndarray)
-            and audio.ndim >= 2
+            and isinstance(audio, torch.Tensor)
+            and audio.ndim == 4
         ):
             # Apply augmentations with independent randomization for each example
+            # Input shape: (batch, source, channel, time)
             batch_size = audio.shape[0]
             results = []
             logs_per_example = [] if log else None
 
             for i in range(batch_size):
                 # Apply the full sequence to each example independently
+                # audio[i] has shape (source, channel, time)
                 result = audio[i]
                 example_transforms = {}
 
@@ -124,7 +126,7 @@ class Compose(BaseAugmentation):
                     )
 
             # Stack results back into batch
-            output = np.stack(results, axis=0)
+            output = torch.stack(results, dim=0)
             if log:
                 return output, logs_per_example
             return output
@@ -258,11 +260,11 @@ class OneOf(BaseAugmentation):
             total = sum(weight_list)
             self.weights = [w / total for w in weight_list]
 
-    def __call__(self, audio: Union[np.ndarray, Any], log: bool = False, **kwargs):
+    def __call__(self, audio: Union[torch.Tensor, Any], log: bool = False, **kwargs):
         """Apply one randomly selected augmentation.
 
         Args:
-            audio: Input audio.
+            audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
             log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to the selected augmentation.
 
@@ -275,13 +277,14 @@ class OneOf(BaseAugmentation):
                 return audio, None
             return audio
 
-        # Check if we need per_example mode
+        # Check if we need per_example mode (batch dimension present)
         if (
             self.mode == "per_example"
-            and isinstance(audio, np.ndarray)
-            and audio.ndim >= 2
+            and isinstance(audio, torch.Tensor)
+            and audio.ndim == 4
         ):
             # Apply different augmentation to each example in the batch
+            # Input shape: (batch, source, channel, time)
             batch_size = audio.shape[0]
             results = []
             logs_per_example = [] if log else None
@@ -289,14 +292,15 @@ class OneOf(BaseAugmentation):
             for i in range(batch_size):
                 # Select one augmentation for this example
                 if self.weights is None:
-                    idx = np.random.randint(0, len(self.augmentations))
+                    idx = torch.randint(0, len(self.augmentations), (1,)).item()
                 else:
-                    idx = np.random.choice(len(self.augmentations), p=self.weights)
+                    idx = torch.multinomial(torch.tensor(self.weights), 1).item()
 
                 selected = self.augmentations[idx]
                 selected_name = self.augmentation_names[idx]
                 selected.randomize_parameters()
                 # Apply to single example
+                # audio[i] has shape (source, channel, time)
                 example = audio[i]
 
                 if log:
@@ -314,16 +318,16 @@ class OneOf(BaseAugmentation):
                 results.append(result)
 
             # Stack results back into batch
-            output = np.stack(results, axis=0)
+            output = torch.stack(results, dim=0)
             if log:
                 return output, logs_per_example
             return output
         else:
             # per_batch mode: apply same augmentation to entire batch
             if self.weights is None:
-                idx = np.random.randint(0, len(self.augmentations))
+                idx = torch.randint(0, len(self.augmentations), (1,)).item()
             else:
-                idx = np.random.choice(len(self.augmentations), p=self.weights)
+                idx = torch.multinomial(torch.tensor(self.weights), 1).item()
 
             selected = self.augmentations[idx]
             selected_name = self.augmentation_names[idx]
@@ -444,11 +448,11 @@ class SomeOf(BaseAugmentation):
                     f"for augmentation '{name}'"
                 )
 
-    def __call__(self, audio: np.ndarray | Any, log: bool = False, **kwargs):
+    def __call__(self, audio: torch.Tensor | Any, log: bool = False, **kwargs):
         """Apply k randomly selected augmentations.
 
         Args:
-            audio: Input audio.
+            audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
             log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to each augmentation.
 
@@ -461,13 +465,14 @@ class SomeOf(BaseAugmentation):
                 return audio, None
             return audio
 
-        # Check if we need per_example mode
+        # Check if we need per_example mode (batch dimension present)
         if (
             self.mode == "per_example"
-            and isinstance(audio, np.ndarray)
-            and audio.ndim >= 2
+            and isinstance(audio, torch.Tensor)
+            and audio.ndim == 4
         ):
             # Apply different k augmentations to each example in the batch
+            # Input shape: (batch, source, channel, time)
             batch_size = audio.shape[0]
             results = []
             logs_per_example = [] if log else None
@@ -477,7 +482,7 @@ class SomeOf(BaseAugmentation):
                 if self.k_min == self.k_max:
                     k = self.k_min
                 else:
-                    k = np.random.randint(self.k_min, self.k_max + 1)
+                    k = torch.randint(self.k_min, self.k_max + 1, (1,)).item()
 
                 if k == 0:
                     results.append(audio[i])
@@ -489,22 +494,20 @@ class SomeOf(BaseAugmentation):
 
                 # Select k augmentations for this example
                 if self.replace:
-                    indices = np.random.choice(
-                        len(self.augmentations), size=k, replace=True
-                    )
+                    indices = torch.randint(0, len(self.augmentations), (k,))
                 else:
-                    indices = np.random.choice(
-                        len(self.augmentations), size=k, replace=False
-                    )
+                    indices = torch.randperm(len(self.augmentations))[:k]
 
                 # Apply selected augmentations sequentially to this example
+                # audio[i] has shape (source, channel, time)
                 result = audio[i]
                 selected_names = []
                 transforms = {} if log else None
 
                 for idx in indices:
-                    selected = self.augmentations[idx]
-                    selected_name = self.augmentation_names[idx]
+                    idx_val = idx.item()
+                    selected = self.augmentations[idx_val]
+                    selected_name = self.augmentation_names[idx_val]
                     selected.randomize_parameters()
 
                     if log:
@@ -525,7 +528,7 @@ class SomeOf(BaseAugmentation):
                     )
 
             # Stack results back into batch
-            output = np.stack(results, axis=0)
+            output = torch.stack(results, dim=0)
             if log:
                 return output, logs_per_example
             return output
@@ -535,7 +538,7 @@ class SomeOf(BaseAugmentation):
             if self.k_min == self.k_max:
                 k = self.k_min
             else:
-                k = np.random.randint(self.k_min, self.k_max + 1)
+                k = torch.randint(self.k_min, self.k_max + 1, (1,)).item()
 
             if k == 0:
                 if log:
@@ -548,13 +551,9 @@ class SomeOf(BaseAugmentation):
 
             # Select k augmentations
             if self.replace:
-                indices = np.random.choice(
-                    len(self.augmentations), size=k, replace=True
-                )
+                indices = torch.randint(0, len(self.augmentations), (k,))
             else:
-                indices = np.random.choice(
-                    len(self.augmentations), size=k, replace=False
-                )
+                indices = torch.randperm(len(self.augmentations))[:k]
 
             # Apply selected augmentations sequentially
             result = audio
@@ -562,8 +561,9 @@ class SomeOf(BaseAugmentation):
             transforms = {} if log else None
 
             for idx in indices:
-                selected = self.augmentations[idx]
-                selected_name = self.augmentation_names[idx]
+                idx_val = idx.item()
+                selected = self.augmentations[idx_val]
+                selected_name = self.augmentation_names[idx_val]
                 selected.randomize_parameters()
 
                 if log:

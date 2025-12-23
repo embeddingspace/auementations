@@ -4,8 +4,8 @@ These tests follow the Given-When-Then pattern to ensure the base
 augmentation interface works as expected.
 """
 
-import numpy as np
 import pytest
+import torch
 
 from tests.conftest import MockAugmentation
 
@@ -76,26 +76,26 @@ class TestBaseAugmentationProbabilisticBehavior:
         """Given p=1.0, when augmentation is applied, then it always modifies audio."""
         # Given
         aug = MockAugmentation(sample_rate=16000, gain=2.0, p=1.0)
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert not np.array_equal(result, original)
-        assert np.allclose(result, original * 2.0)
+        assert not torch.equal(result, original)
+        assert torch.allclose(result, original * 2.0)
 
     def test_given_probability_zero_when_applied_then_never_applies(self, mono_audio):
         """Given p=0.0, when augmentation is applied, then it never modifies audio."""
         # Given
         aug = MockAugmentation(sample_rate=16000, gain=2.0, p=0.0)
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert np.array_equal(result, original)
+        assert torch.equal(result, original)
 
     def test_given_probability_half_when_applied_many_times_then_applies_approximately_half(
         self, mono_audio

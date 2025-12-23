@@ -5,6 +5,7 @@ adapter works correctly.
 """
 
 import numpy as np
+import torch
 
 from auementations.adapters.pedalboard import (
     HighPassFilter,
@@ -104,11 +105,11 @@ class TestLowPassFilterAugmentation:
         # Output should have same shape
         assert result.shape == mono_audio.shape
         # Output should be different (filtered)
-        assert not np.array_equal(result, mono_audio)
+        assert not torch.equal(result, mono_audio)
         # Output should have reduced high-frequency content (lower RMS than original sine wave at 440Hz)
         # Since 440Hz is below 1000Hz cutoff, the signal should pass through with some attenuation
         # But this is a basic sanity check that filtering occurred
-        assert isinstance(result, np.ndarray)
+        assert isinstance(result, torch.Tensor)
 
     def test_given_stereo_audio_when_filtered_then_preserves_shape(self, stereo_audio):
         """Given stereo audio, when low-pass filter applied, then output shape is preserved."""
@@ -128,13 +129,13 @@ class TestLowPassFilterAugmentation:
         """Given p=0.0, when low-pass filter applied, then audio is unchanged."""
         # Given
         aug = LowPassFilter(sample_rate=16000, cutoff_freq=1000.0, p=0.0)
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert np.array_equal(result, original)
+        assert torch.equal(result, original)
 
     def test_given_range_cutoff_when_applied_then_uses_random_cutoff(self):
         """Given cutoff range, when applied, then uses random cutoff frequency."""
@@ -176,9 +177,9 @@ class TestHighPassFilterAugmentation:
         # Output should have same shape
         assert result.shape == mono_audio.shape
         # Output should be different (filtered)
-        assert not np.array_equal(result, mono_audio)
+        assert not torch.equal(result, mono_audio)
         # Output should have significantly reduced amplitude since 440Hz is below 5000Hz cutoff
-        assert isinstance(result, np.ndarray)
+        assert isinstance(result, torch.Tensor)
 
     def test_given_stereo_audio_when_filtered_then_preserves_shape(self, stereo_audio):
         """Given stereo audio, when high-pass filter applied, then output shape is preserved."""
@@ -198,13 +199,13 @@ class TestHighPassFilterAugmentation:
         """Given p=0.0, when high-pass filter applied, then audio is unchanged."""
         # Given
         aug = HighPassFilter(sample_rate=16000, cutoff_freq=1000.0, p=0.0)
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert np.array_equal(result, original)
+        assert torch.equal(result, original)
 
     def test_given_range_cutoff_when_applied_then_uses_random_cutoff(self):
         """Given cutoff range, when applied, then uses random cutoff frequency."""
@@ -270,19 +271,19 @@ class TestPedalboardAdapterConfiguration:
 class TestPedalboardAdapterNumpyHandling:
     """Test scenarios for numpy array handling."""
 
-    def test_given_numpy_array_when_processed_then_returns_numpy_array(
+    def test_given_torch_tensor_when_processed_then_returns_torch_tensor(
         self, mono_audio
     ):
-        """Given numpy array input, when processed, then returns numpy array."""
+        """Given torch tensor input, when processed, then returns torch tensor."""
         # Given
         aug = LowPassFilter(sample_rate=16000, cutoff_freq=2000.0)
-        assert isinstance(mono_audio, np.ndarray)
+        assert isinstance(mono_audio, torch.Tensor)
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert isinstance(result, np.ndarray)
+        assert isinstance(result, torch.Tensor)
         assert result.dtype == mono_audio.dtype
 
     def test_given_different_audio_shapes_when_processed_then_preserves_shapes(self):

@@ -77,24 +77,27 @@ class Compose(BaseAugmentation):
 
         Args:
             audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
+                  - 3D (source, channel, time): single example, returns single dict
+                  - 4D (batch, source, channel, time): defaults to per_example mode (returns list)
             log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to each augmentation.
 
         Returns:
             If log=False: Augmented audio.
-            If log=True: Tuple of (augmented_audio, log_dict).
+            If log=True: Tuple of (augmented_audio, log_dict or list of log_dicts).
         """
         if not self.should_apply():
             if log:
                 return audio, None
             return audio
 
-        # Check if we need per_example mode (batch dimension present)
-        if (
-            self.mode == "per_example"
-            and isinstance(audio, torch.Tensor)
-            and audio.ndim == 4
-        ):
+        # Determine behavior based on input dimensions
+        # 3D input (source, channel, time): single example, apply like per_batch
+        # 4D input (batch, source, channel, time): check mode
+        is_batch = isinstance(audio, torch.Tensor) and audio.ndim == 4
+        apply_per_example = is_batch and self.mode == "per_example"
+
+        if apply_per_example:
             # Apply augmentations with independent randomization for each example
             # Input shape: (batch, source, channel, time)
             batch_size = audio.shape[0]
@@ -131,7 +134,8 @@ class Compose(BaseAugmentation):
                 return output, logs_per_example
             return output
         else:
-            # per_batch mode: apply same randomization to entire batch
+            # Single example mode: 3D input OR 4D input with mode="per_batch"
+            # Apply same randomization to entire input
             result = audio
             transforms = {} if log else None
 
@@ -265,24 +269,27 @@ class OneOf(BaseAugmentation):
 
         Args:
             audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
+                  - 3D (source, channel, time): single example, returns single dict
+                  - 4D (batch, source, channel, time): defaults to per_example mode (returns list)
             log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to the selected augmentation.
 
         Returns:
             If log=False: Augmented audio.
-            If log=True: Tuple of (augmented_audio, log_dict).
+            If log=True: Tuple of (augmented_audio, log_dict or list of log_dicts).
         """
         if not self.should_apply():
             if log:
                 return audio, None
             return audio
 
-        # Check if we need per_example mode (batch dimension present)
-        if (
-            self.mode == "per_example"
-            and isinstance(audio, torch.Tensor)
-            and audio.ndim == 4
-        ):
+        # Determine behavior based on input dimensions
+        # 3D input (source, channel, time): single example, apply like per_batch
+        # 4D input (batch, source, channel, time): check mode
+        is_batch = isinstance(audio, torch.Tensor) and audio.ndim == 4
+        apply_per_example = is_batch and self.mode == "per_example"
+
+        if apply_per_example:
             # Apply different augmentation to each example in the batch
             # Input shape: (batch, source, channel, time)
             batch_size = audio.shape[0]
@@ -323,7 +330,8 @@ class OneOf(BaseAugmentation):
                 return output, logs_per_example
             return output
         else:
-            # per_batch mode: apply same augmentation to entire batch
+            # Single example mode: 3D input OR 4D input with mode="per_batch"
+            # Apply same augmentation to entire input
             if self.weights is None:
                 idx = torch.randint(0, len(self.augmentations), (1,)).item()
             else:
@@ -453,24 +461,27 @@ class SomeOf(BaseAugmentation):
 
         Args:
             audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
+                  - 3D (source, channel, time): single example, returns single dict
+                  - 4D (batch, source, channel, time): defaults to per_example mode (returns list)
             log: If True, return (audio, log_dict). If False, return audio only.
             **kwargs: Additional parameters passed to each augmentation.
 
         Returns:
             If log=False: Augmented audio.
-            If log=True: Tuple of (augmented_audio, log_dict).
+            If log=True: Tuple of (augmented_audio, log_dict or list of log_dicts).
         """
         if not self.should_apply():
             if log:
                 return audio, None
             return audio
 
-        # Check if we need per_example mode (batch dimension present)
-        if (
-            self.mode == "per_example"
-            and isinstance(audio, torch.Tensor)
-            and audio.ndim == 4
-        ):
+        # Determine behavior based on input dimensions
+        # 3D input (source, channel, time): single example, apply like per_batch
+        # 4D input (batch, source, channel, time): check mode
+        is_batch = isinstance(audio, torch.Tensor) and audio.ndim == 4
+        apply_per_example = is_batch and self.mode == "per_example"
+
+        if apply_per_example:
             # Apply different k augmentations to each example in the batch
             # Input shape: (batch, source, channel, time)
             batch_size = audio.shape[0]
@@ -533,7 +544,8 @@ class SomeOf(BaseAugmentation):
                 return output, logs_per_example
             return output
         else:
-            # per_batch mode: apply same k augmentations to entire batch
+            # Single example mode: 3D input OR 4D input with mode="per_batch"
+            # Apply same k augmentations to entire input
             # Determine how many augmentations to apply
             if self.k_min == self.k_max:
                 k = self.k_min

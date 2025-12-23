@@ -478,10 +478,15 @@ class PeakFilter(nn.Module):
         if x_np.dtype not in (np.float32, np.float64):
             x_np = x_np.astype(np.float32)
 
-        # Expected shape: (batch, source, channel, time)
-        if x_np.ndim != 4:
+        # Handle both 3D (source, channel, time) and 4D (batch, source, channel, time) inputs
+        squeeze_batch = False
+        if x_np.ndim == 3:
+            # Add batch dimension for 3D input
+            x_np = np.expand_dims(x_np, axis=0)
+            squeeze_batch = True
+        elif x_np.ndim != 4:
             raise ValueError(
-                f"Expected 4D input (batch, source, channel, time), got {x_np.ndim}D"
+                f"Expected 3D (source, channel, time) or 4D (batch, source, channel, time) input, got {x_np.ndim}D"
             )
 
         batch_size, n_sources, n_channels, n_samples = x_np.shape
@@ -531,6 +536,13 @@ class PeakFilter(nn.Module):
             output = torch.nan_to_num(output, nan=0.0, posinf=1.0, neginf=-1.0)
         else:
             output = np.nan_to_num(output, nan=0.0, posinf=1.0, neginf=-1.0)
+
+        # Remove batch dimension if we added it
+        if squeeze_batch:
+            if was_torch:
+                output = output.squeeze(0)
+            else:
+                output = np.squeeze(output, axis=0)
 
         return output
 

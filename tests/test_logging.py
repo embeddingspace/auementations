@@ -209,8 +209,8 @@ class TestPerExampleLogging:
 class TestCompositionLogging:
     """Tests for logging in composition classes (Compose, OneOf, SomeOf)."""
 
-    def test_composition_with_log_returns_dict(self, comp_cls, expected_name):
-        # GIVEN: A composition with augmentations
+    def test_composition_3d_input_returns_single_dict(self, comp_cls, expected_name):
+        # GIVEN: A composition with 3D input (source, channel, time) - single example
         augmentations = {
             "gain": GainAugmentation(
                 sample_rate=16000,
@@ -233,17 +233,20 @@ class TestCompositionLogging:
             aug = comp_cls(k=2, augmentations=augmentations, sample_rate=16000)
         else:
             aug = comp_cls(augmentations, sample_rate=16000)
+        # 3D tensor: (source, channel, time)
         audio = torch.randn(1, 1, 1000)
 
         # WHEN: Called with log=True
         audio_out, log_dict = aug(audio, log=True)
 
-        # THEN: Log should be a dict with "augmentation" key
-        assert isinstance(log_dict, dict)
+        # THEN: Log should be a single dict (not a list)
+        assert isinstance(log_dict, dict), (
+            f"Expected dict for 3D input, got {type(log_dict)}"
+        )
         assert log_dict["augmentation"] == expected_name
 
     def test_composition_log_is_none_when_not_applied(self, comp_cls, expected_name):
-        # GIVEN: A composition with p=0.0
+        # GIVEN: A composition with p=0.0 and 3D input
         augmentations = {
             "gain": GainAugmentation(
                 sample_rate=16000, min_gain_db=-6, max_gain_db=6, p=1.0, seed=42
@@ -255,6 +258,7 @@ class TestCompositionLogging:
             )
         else:
             aug = comp_cls(augmentations, sample_rate=16000, p=0.0)
+        # 3D tensor: (source, channel, time)
         audio = torch.randn(1, 1, 1000)
 
         # WHEN: Called with log=True
@@ -460,13 +464,16 @@ class TestSomeOfLogging:
 
 @pytest.mark.parametrize(
     "comp_cls,expected_name",
-    [(Compose, "Compose"), (OneOf, "OneOf")],
+    [(Compose, "Compose"), (OneOf, "OneOf"), (SomeOf, "SomeOf")],
 )
 class TestCompositionPerBatchLogging:
-    """Tests for logging in composition classes with per_batch mode."""
+    """Tests for logging in composition classes with explicit per_batch mode."""
 
-    def test_composition_per_batch_returns_dict(self, comp_cls, expected_name):
-        # GIVEN: A composition in per_batch mode with a batch
+    def test_composition_4d_input_per_batch_mode_returns_single_dict(
+        self, comp_cls, expected_name
+    ):
+        # GIVEN: A composition with EXPLICIT mode="per_batch" and 4D input
+        # This overrides the default per_example behavior for 4D input
         batch_size = 3
         augmentations = {
             "gain": GainAugmentation(
@@ -478,15 +485,22 @@ class TestCompositionPerBatchLogging:
                 seed=42,
             ),
         }
-        aug = comp_cls(augmentations, sample_rate=16000, mode="per_batch")
-        # Use torch tensors for GainAugmentation
-        audio = torch.randn(batch_size, 1, 1000)
+        if comp_cls == SomeOf:
+            aug = comp_cls(
+                k=1, augmentations=augmentations, sample_rate=16000, mode="per_batch"
+            )
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000, mode="per_batch")
+        # 4D tensor: (batch, source, channel, time)
+        audio = torch.randn(batch_size, 1, 1, 1000)
 
         # WHEN: Called with log=True
         audio_out, log_dict = aug(audio, log=True)
 
-        # THEN: Log should be a dict (per_batch mode)
-        assert isinstance(log_dict, dict)
+        # THEN: Log should be a single dict (not a list) because mode="per_batch"
+        assert isinstance(log_dict, dict), (
+            f"Expected dict for per_batch mode, got {type(log_dict)}"
+        )
         assert log_dict["augmentation"] == expected_name
 
 
@@ -495,12 +509,61 @@ class TestCompositionPerBatchLogging:
     [(Compose, "Compose"), (OneOf, "OneOf"), (SomeOf, "SomeOf")],
 )
 class TestCompositionPerExampleLogging:
-    """Tests for logging in composition classes with per_example mode."""
+    """Tests for logging in composition classes with per_example mode (4D input)."""
 
-    def test_composition_per_example_returns_list_of_logs(
+    def test_composition_4d_input_defaults_to_per_example_returns_list(
         self, comp_cls, expected_name
     ):
-        # GIVEN: A composition in per_example mode with a batch
+        # GIVEN: A composition with 4D input (batch, source, channel, time)
+        # WITHOUT explicitly setting mode (should default to per_example)
+        batch_size = 4
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000,
+                min_gain_db=-6,
+                max_gain_db=6,
+                p=1.0,
+                mode="per_batch",
+                seed=42,
+            ),
+            "noise": NoiseAugmentation(
+                sample_rate=16000,
+                min_gain_db=-80,
+                max_gain_db=-60,
+                p=1.0,
+                mode="per_batch",
+                seed=43,
+            ),
+        }
+        if comp_cls == SomeOf:
+            aug = comp_cls(k=2, augmentations=augmentations, sample_rate=16000)
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000)
+
+        # Shape: (batch, source, channel, time) - 4D
+        audio = torch.randn(batch_size, 1, 1, 1000)
+
+        # WHEN: Called with log=True
+        audio_out, log_list = aug(audio, log=True)
+
+        # THEN: Log should be a list (defaults to per_example for 4D input)
+        assert isinstance(log_list, list), (
+            f"Expected list for 4D input (default per_example), got {type(log_list)}"
+        )
+        assert len(log_list) == batch_size, (
+            f"Expected {batch_size} logs, got {len(log_list)}"
+        )
+        # Each entry should be a dict
+        for i, log_dict in enumerate(log_list):
+            assert isinstance(log_dict, dict), (
+                f"Example {i}: expected dict, got {type(log_dict)}"
+            )
+            assert log_dict["augmentation"] == expected_name
+
+    def test_composition_per_example_explicit_mode_returns_list_of_logs(
+        self, comp_cls, expected_name
+    ):
+        # GIVEN: A composition with explicit mode="per_example"
         batch_size = 4
         augmentations = {
             "gain": GainAugmentation(

@@ -73,7 +73,7 @@ class TestRealisticOneOfComposition:
         # AND: The composition can process audio successfully
         result = augmentation(mono_audio)
         assert result.shape == mono_audio.shape
-        assert isinstance(result, np.ndarray)
+        assert isinstance(result, torch.Tensor)
 
     def test_given_one_of_composition_when_applied_multiple_times_then_produces_different_results(
         self, mono_audio
@@ -117,7 +117,7 @@ class TestRealisticOneOfComposition:
         num_trials = 20
         results = []
         for _ in range(num_trials):
-            result = augmentation(mono_audio.copy())
+            result = augmentation(mono_audio.clone())
             results.append(result)
 
         # THEN: At least some results should be different
@@ -125,7 +125,7 @@ class TestRealisticOneOfComposition:
         # Compare results pairwise - not all should be identical
         different_count = 0
         for i in range(num_trials - 1):
-            if not np.allclose(results[i], results[i + 1], atol=1e-6):
+            if not torch.allclose(results[i], results[i + 1], atol=1e-6):
                 different_count += 1
 
         # We should see at least some variation (not all pairs identical)
@@ -174,7 +174,7 @@ class TestRealisticOneOfComposition:
         num_trials = 10
         results = []
         for _ in range(num_trials):
-            result = augmentation(mono_audio.copy())
+            result = augmentation(mono_audio.clone())
             results.append(result)
 
         # THEN: Results should vary because:
@@ -184,7 +184,7 @@ class TestRealisticOneOfComposition:
         for result in results:
             is_unique = True
             for unique in unique_results:
-                if np.allclose(result, unique, atol=1e-6):
+                if torch.allclose(result, unique, atol=1e-6):
                     is_unique = False
                     break
             if is_unique:
@@ -237,9 +237,9 @@ class TestRealisticOneOfComposition:
         assert result.shape == mono_audio.shape
 
         # AND: Multiple applications produce variation
-        results = [augmentation(mono_audio.copy()) for _ in range(10)]
+        results = [augmentation(mono_audio.clone()) for _ in range(10)]
         # Check that not all results are identical
-        all_same = all(np.allclose(results[0], r, atol=1e-6) for r in results[1:])
+        all_same = all(torch.allclose(results[0], r, atol=1e-6) for r in results[1:])
         assert not all_same, "All results identical - composition not working correctly"
 
 
@@ -526,11 +526,17 @@ def test_PedalboardAugmentationsHandle2_3_4_dims(aug_name, stereo_audio, ndim):
     #     config,
     # )
     #
+    # stereo_audio is (1, 2, time) = (source, channel, time) - 3D
     match ndim:
+        case 2:
+            # For 2D, extract just (channel, time)
+            input = stereo_audio[0]  # (2, time)
         case 3:
-            input = torch.tensor(stereo_audio).unsqueeze(0)
+            # For 3D, use as-is: (source, channel, time)
+            input = stereo_audio
         case 4:
-            input = torch.tensor(stereo_audio).unsqueeze(0).unsqueeze(0)
+            # For 4D, add batch dimension: (batch, source, channel, time)
+            input = stereo_audio.unsqueeze(0)
         case _:
             input = stereo_audio
 

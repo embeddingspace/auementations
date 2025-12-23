@@ -1,17 +1,19 @@
 """Tests for augmentation logging functionality."""
 
+import pytest
 import torch
 
 from auementations.adapters.custom import GainAugmentation, NoiseAugmentation
 from auementations.core.composition import Compose, OneOf, SomeOf
 
 
+@pytest.mark.parametrize("aug_cls", [GainAugmentation, NoiseAugmentation])
 class TestSimpleAugmentationLogging:
     """Tests for logging in simple augmentations."""
 
-    def test_call_without_log_returns_only_audio(self):
+    def test_call_without_log_returns_only_audio(self, aug_cls):
         # GIVEN: A simple augmentation
-        aug = GainAugmentation(min_gain_db=-6.0, max_gain_db=6.0, p=1.0, seed=42)
+        aug = aug_cls(min_gain_db=-6.0, max_gain_db=6.0, p=1.0, seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called without log parameter
@@ -21,9 +23,9 @@ class TestSimpleAugmentationLogging:
         assert isinstance(result, torch.Tensor)
         assert result.shape == audio.shape
 
-    def test_call_with_log_false_returns_only_audio(self):
+    def test_call_with_log_false_returns_only_audio(self, aug_cls):
         # GIVEN: A simple augmentation
-        aug = GainAugmentation(min_gain_db=-6.0, max_gain_db=6.0, p=1.0, seed=42)
+        aug = aug_cls(min_gain_db=-6.0, max_gain_db=6.0, p=1.0, seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=False
@@ -33,9 +35,9 @@ class TestSimpleAugmentationLogging:
         assert isinstance(result, torch.Tensor)
         assert result.shape == audio.shape
 
-    def test_call_with_log_true_returns_audio_and_dict(self):
+    def test_call_with_log_true_returns_audio_and_dict(self, aug_cls):
         # GIVEN: A simple augmentation in per_batch mode (single dict output)
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
         )
         audio = torch.randn(1, 1000)
@@ -50,9 +52,9 @@ class TestSimpleAugmentationLogging:
         assert isinstance(audio_out, torch.Tensor)
         assert isinstance(log_dict, dict)
 
-    def test_log_dict_contains_augmentation_name_and_parameters(self):
+    def test_log_dict_contains_augmentation_name_and_parameters(self, aug_cls):
         # GIVEN: A simple augmentation with fixed parameters in per_batch mode
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
         )
         audio = torch.randn(1, 1000)
@@ -62,15 +64,15 @@ class TestSimpleAugmentationLogging:
 
         # THEN: Log dict should contain augmentation name and parameters
         assert "augmentation" in log_dict
-        assert log_dict["augmentation"] == "GainAugmentation"
+        assert log_dict["augmentation"] == aug_cls.__name__
         assert "parameters" in log_dict
         assert isinstance(log_dict["parameters"], dict)
         # Should contain the actual sampled gain value
         assert "gain_db" in log_dict["parameters"]
 
-    def test_log_contains_actual_sampled_parameters(self):
+    def test_log_contains_actual_sampled_parameters(self, aug_cls):
         # GIVEN: An augmentation with a range parameter in per_batch mode
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
         )
         audio = torch.randn(1, 1000)
@@ -89,9 +91,9 @@ class TestSimpleAugmentationLogging:
         # Note: GainAugmentation limits gain based on signal level to prevent clipping
         # We just verify that we get numeric values, not specific ranges
 
-    def test_log_is_none_when_augmentation_not_applied(self):
+    def test_log_is_none_when_augmentation_not_applied(self, aug_cls):
         # GIVEN: An augmentation with p=0 (never applies)
-        aug = GainAugmentation(min_gain_db=-6.0, max_gain_db=6.0, p=0.0, seed=42)
+        aug = aug_cls(min_gain_db=-6.0, max_gain_db=6.0, p=0.0, seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=True
@@ -102,9 +104,9 @@ class TestSimpleAugmentationLogging:
         # Audio should be unchanged
         assert torch.allclose(audio_out, audio)
 
-    def test_log_is_present_when_augmentation_applied_with_probability(self):
+    def test_log_is_present_when_augmentation_applied_with_probability(self, aug_cls):
         # GIVEN: An augmentation with p=1.0 (always applies) in per_batch mode
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
         )
         audio = torch.randn(1, 1000)
@@ -119,13 +121,14 @@ class TestSimpleAugmentationLogging:
         assert "parameters" in log_dict
 
 
+@pytest.mark.parametrize("aug_cls", [GainAugmentation, NoiseAugmentation])
 class TestPerExampleLogging:
     """Tests for logging in per-example mode."""
 
-    def test_per_example_mode_returns_list_of_logs(self):
+    def test_per_example_mode_returns_list_of_logs(self, aug_cls):
         # GIVEN: An augmentation in per_example mode with a batch
         batch_size = 4
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_example", seed=42
         )
         audio = torch.randn(batch_size, 1000)
@@ -142,10 +145,10 @@ class TestPerExampleLogging:
             assert "augmentation" in log_dict
             assert "parameters" in log_dict
 
-    def test_per_example_mode_logs_different_parameters_per_example(self):
+    def test_per_example_mode_logs_different_parameters_per_example(self, aug_cls):
         # GIVEN: An augmentation in per_example mode
         batch_size = 4
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_example", seed=42
         )
         audio = torch.randn(batch_size, 1000)
@@ -159,13 +162,13 @@ class TestPerExampleLogging:
         unique_gains = len(set(gains))
         assert unique_gains > 1, "Expected different gains per example"
 
-    def test_per_example_mode_with_some_not_applied(self):
+    def test_per_example_mode_with_some_not_applied(self, aug_cls):
         # GIVEN: An augmentation with p=0.5 in per_example mode
         batch_size = 8
         # Note: GainAugmentation applies p check once for the whole batch, not per example
         # So we need to test this with a composition that can apply per-example
         # For now, let's test that the structure is correct when some DO apply
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_example", seed=42
         )
         audio = torch.randn(batch_size, 1000)
@@ -179,10 +182,10 @@ class TestPerExampleLogging:
         dict_count = sum(1 for log in log_list if isinstance(log, dict))
         assert dict_count == batch_size
 
-    def test_per_example_mode_maintains_index_alignment_with_none(self):
+    def test_per_example_mode_maintains_index_alignment_with_none(self, aug_cls):
         # GIVEN: An augmentation with p=0.5 in per_example mode (some will not apply)
         batch_size = 4
-        aug = GainAugmentation(
+        aug = aug_cls(
             min_gain_db=-6.0, max_gain_db=6.0, p=0.5, mode="per_example", seed=123
         )
         audio = torch.randn(batch_size, 1000)
@@ -199,8 +202,70 @@ class TestPerExampleLogging:
             )
 
 
+@pytest.mark.parametrize(
+    "comp_cls,expected_name",
+    [(Compose, "Compose"), (OneOf, "OneOf"), (SomeOf, "SomeOf")],
+)
+class TestCompositionLogging:
+    """Tests for logging in composition classes (Compose, OneOf, SomeOf)."""
+
+    def test_composition_with_log_returns_dict(self, comp_cls, expected_name):
+        # GIVEN: A composition with augmentations
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000,
+                min_gain_db=-6.0,
+                max_gain_db=6.0,
+                p=1.0,
+                mode="per_batch",
+                seed=42,
+            ),
+            "noise": NoiseAugmentation(
+                sample_rate=16000,
+                min_gain_db=-80,
+                max_gain_db=-60,
+                p=1.0,
+                mode="per_batch",
+                seed=43,
+            ),
+        }
+        if comp_cls == SomeOf:
+            aug = comp_cls(k=2, augmentations=augmentations, sample_rate=16000)
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000)
+        audio = torch.randn(1, 1, 1000)
+
+        # WHEN: Called with log=True
+        audio_out, log_dict = aug(audio, log=True)
+
+        # THEN: Log should be a dict with "augmentation" key
+        assert isinstance(log_dict, dict)
+        assert log_dict["augmentation"] == expected_name
+
+    def test_composition_log_is_none_when_not_applied(self, comp_cls, expected_name):
+        # GIVEN: A composition with p=0.0
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000, min_gain_db=-6, max_gain_db=6, p=1.0, seed=42
+            ),
+        }
+        if comp_cls == SomeOf:
+            aug = comp_cls(
+                k=1, augmentations=augmentations, sample_rate=16000, p=0.0, seed=100
+            )
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000, p=0.0)
+        audio = torch.randn(1, 1, 1000)
+
+        # WHEN: Called with log=True
+        audio_out, log_dict = aug(audio, log=True)
+
+        # THEN: Log should be None
+        assert log_dict is None
+
+
 class TestComposeLogging:
-    """Tests for logging in Compose."""
+    """Tests for Compose-specific logging behavior."""
 
     def test_compose_with_log_returns_nested_dict(self):
         # GIVEN: A Compose with multiple augmentations
@@ -284,28 +349,9 @@ class TestComposeLogging:
         assert "gain" in transforms
         assert "noise" not in transforms  # Omitted because not applied
 
-    def test_compose_log_is_none_when_compose_not_applied(self):
-        # GIVEN: A Compose with p=0.0
-        aug = Compose(
-            {
-                "gain": GainAugmentation(
-                    sample_rate=16000, min_gain_db=-6, max_gain_db=6, p=1.0, seed=42
-                ),
-            },
-            sample_rate=16000,
-            p=0.0,
-        )
-        audio = torch.randn(1, 1, 1000)
-
-        # WHEN: Called with log=True
-        audio_out, log_dict = aug(audio, log=True)
-
-        # THEN: Log should be None
-        assert log_dict is None
-
 
 class TestOneOfLogging:
-    """Tests for logging in OneOf."""
+    """Tests for OneOf-specific logging behavior."""
 
     def test_oneof_with_log_returns_dict_with_selected_augmentation(self):
         # GIVEN: A OneOf with multiple augmentations
@@ -347,32 +393,9 @@ class TestOneOfLogging:
         assert isinstance(log_dict["transform"], dict)
         assert log_dict["transform"]["augmentation"] == "GainAugmentation"
 
-    def test_oneof_log_is_none_when_not_applied(self):
-        # GIVEN: A OneOf with p=0.0
-        aug = OneOf(
-            {
-                "gain_high": GainAugmentation(
-                    sample_rate=16000, min_gain_db=3, max_gain_db=6, p=1.0, seed=42
-                ),
-                "gain_low": GainAugmentation(
-                    sample_rate=16000, min_gain_db=-6, max_gain_db=-3, p=1.0, seed=43
-                ),
-            },
-            sample_rate=16000,
-            p=0.0,
-            seed=100,
-        )
-        audio = torch.randn(1, 1, 1000)
-
-        # WHEN: Called with log=True
-        audio_out, log_dict = aug(audio, log=True)
-
-        # THEN: Log should be None
-        assert log_dict is None
-
 
 class TestSomeOfLogging:
-    """Tests for logging in SomeOf."""
+    """Tests for SomeOf-specific logging behavior."""
 
     def test_someof_with_log_returns_dict_with_selected_augmentations(self):
         # GIVEN: A SomeOf with k=2
@@ -412,30 +435,6 @@ class TestSomeOfLogging:
         for key in log_dict["selected"]:
             assert key in log_dict["transforms"]
 
-    def test_someof_log_is_none_when_not_applied(self):
-        # GIVEN: A SomeOf with p=0.0
-        aug = SomeOf(
-            k=2,
-            augmentations={
-                "gain": GainAugmentation(
-                    sample_rate=16000, min_gain_db=-6, max_gain_db=6, p=1.0, seed=42
-                ),
-                "noise": NoiseAugmentation(
-                    sample_rate=16000, min_gain_db=-80, max_gain_db=-60, p=1.0, seed=43
-                ),
-            },
-            sample_rate=16000,
-            p=0.0,
-            seed=100,
-        )
-        audio = torch.randn(1, 1, 1000)
-
-        # WHEN: Called with log=True
-        audio_out, log_dict = aug(audio, log=True)
-
-        # THEN: Log should be None
-        assert log_dict is None
-
     def test_someof_with_k_equals_zero_returns_empty_log(self):
         # GIVEN: A SomeOf with k=0
         aug = SomeOf(
@@ -459,26 +458,27 @@ class TestSomeOfLogging:
         assert log_dict["transforms"] == {}
 
 
-class TestComposePerExampleLogging:
-    """Tests for logging in Compose with per_example mode."""
+@pytest.mark.parametrize(
+    "comp_cls,expected_name",
+    [(Compose, "Compose"), (OneOf, "OneOf")],
+)
+class TestCompositionPerBatchLogging:
+    """Tests for logging in composition classes with per_batch mode."""
 
-    def test_compose_per_example_returns_list_of_logs(self):
-        # GIVEN: A Compose in per_example mode with a batch
+    def test_composition_per_batch_returns_dict(self, comp_cls, expected_name):
+        # GIVEN: A composition in per_batch mode with a batch
         batch_size = 3
-        aug = Compose(
-            {
-                "gain": GainAugmentation(
-                    sample_rate=16000,
-                    min_gain_db=-6,
-                    max_gain_db=6,
-                    p=1.0,
-                    mode="per_batch",
-                    seed=42,
-                ),
-            },
-            sample_rate=16000,
-            mode="per_batch",
-        )
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000,
+                min_gain_db=-6,
+                max_gain_db=6,
+                p=1.0,
+                mode="per_batch",
+                seed=42,
+            ),
+        }
+        aug = comp_cls(augmentations, sample_rate=16000, mode="per_batch")
         # Use torch tensors for GainAugmentation
         audio = torch.randn(batch_size, 1, 1000)
 
@@ -487,50 +487,157 @@ class TestComposePerExampleLogging:
 
         # THEN: Log should be a dict (per_batch mode)
         assert isinstance(log_dict, dict)
-        assert log_dict["augmentation"] == "Compose"
-        assert "transforms" in log_dict
+        assert log_dict["augmentation"] == expected_name
 
 
-class TestOneOfPerExampleLogging:
-    """Tests for logging in OneOf with per_example mode."""
+@pytest.mark.parametrize(
+    "comp_cls,expected_name",
+    [(Compose, "Compose"), (OneOf, "OneOf"), (SomeOf, "SomeOf")],
+)
+class TestCompositionPerExampleLogging:
+    """Tests for logging in composition classes with per_example mode."""
 
-    def test_oneof_per_example_returns_list_of_logs(self):
-        # GIVEN: A OneOf in per_example mode with a batch
-        batch_size = 3
-        aug = OneOf(
-            {
-                "gain_high": GainAugmentation(
-                    sample_rate=16000,
-                    min_gain_db=3,
-                    max_gain_db=6,
-                    p=1.0,
-                    mode="per_batch",
-                    seed=42,
-                ),
-                "gain_low": GainAugmentation(
-                    sample_rate=16000,
-                    min_gain_db=-6,
-                    max_gain_db=-3,
-                    p=1.0,
-                    mode="per_batch",
-                    seed=43,
-                ),
-            },
-            sample_rate=16000,
-            mode="per_batch",
-            seed=100,
-        )
-        # Use torch tensors for GainAugmentation
-        audio = torch.randn(batch_size, 1, 1000)
+    def test_composition_per_example_returns_list_of_logs(
+        self, comp_cls, expected_name
+    ):
+        # GIVEN: A composition in per_example mode with a batch
+        batch_size = 4
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000,
+                min_gain_db=-6,
+                max_gain_db=6,
+                p=1.0,
+                mode="per_batch",
+                seed=42,
+            ),
+            "noise": NoiseAugmentation(
+                sample_rate=16000,
+                min_gain_db=-80,
+                max_gain_db=-60,
+                p=1.0,
+                mode="per_batch",
+                seed=43,
+            ),
+        }
+        if comp_cls == SomeOf:
+            aug = comp_cls(
+                k=2, augmentations=augmentations, sample_rate=16000, mode="per_example"
+            )
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000, mode="per_example")
+
+        # Shape: (batch, source, channel, time) for compositions
+        audio = torch.randn(batch_size, 1, 1, 1000)
 
         # WHEN: Called with log=True
-        audio_out, log_dict = aug(audio, log=True)
+        audio_out, log_list = aug(audio, log=True)
 
-        # THEN: Log should be a dict (per_batch mode)
-        assert isinstance(log_dict, dict)
-        assert log_dict["augmentation"] == "OneOf"
-        assert "selected" in log_dict
-        assert "transform" in log_dict
+        # THEN: Log should be a list with one entry per example
+        assert isinstance(log_list, list), (
+            f"Expected list for per_example mode, got {type(log_list)}"
+        )
+        assert len(log_list) == batch_size, (
+            f"Expected {batch_size} logs, got {len(log_list)}"
+        )
+        # Each entry should be a dict
+        for i, log_dict in enumerate(log_list):
+            assert isinstance(log_dict, dict), (
+                f"Example {i}: expected dict, got {type(log_dict)}"
+            )
+            assert log_dict["augmentation"] == expected_name
+
+    def test_composition_per_example_logs_have_correct_structure(
+        self, comp_cls, expected_name
+    ):
+        # GIVEN: A composition in per_example mode
+        batch_size = 3
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000,
+                min_gain_db=-6,
+                max_gain_db=6,
+                p=1.0,
+                mode="per_batch",
+                seed=42,
+            ),
+        }
+        if comp_cls == SomeOf:
+            aug = comp_cls(
+                k=1, augmentations=augmentations, sample_rate=16000, mode="per_example"
+            )
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000, mode="per_example")
+
+        audio = torch.randn(batch_size, 1, 1, 1000)
+
+        # WHEN: Called with log=True
+        audio_out, log_list = aug(audio, log=True)
+
+        # THEN: Each log should have the expected structure
+        for i, log_dict in enumerate(log_list):
+            assert "augmentation" in log_dict, (
+                f"Example {i}: missing 'augmentation' key"
+            )
+            if comp_cls == Compose:
+                assert "transforms" in log_dict, (
+                    f"Example {i}: missing 'transforms' key"
+                )
+                assert isinstance(log_dict["transforms"], dict)
+            elif comp_cls == OneOf:
+                assert "selected" in log_dict, f"Example {i}: missing 'selected' key"
+                assert "transform" in log_dict, f"Example {i}: missing 'transform' key"
+            elif comp_cls == SomeOf:
+                assert "selected" in log_dict, f"Example {i}: missing 'selected' key"
+                assert "transforms" in log_dict, (
+                    f"Example {i}: missing 'transforms' key"
+                )
+
+    def test_composition_per_example_different_logs_per_example(
+        self, comp_cls, expected_name
+    ):
+        # GIVEN: A composition in per_example mode with range parameters
+        batch_size = 4
+        augmentations = {
+            "gain": GainAugmentation(
+                sample_rate=16000,
+                min_gain_db=-6,
+                max_gain_db=6,
+                p=1.0,
+                mode="per_batch",
+                seed=42,
+            ),
+        }
+        if comp_cls == SomeOf:
+            aug = comp_cls(
+                k=1, augmentations=augmentations, sample_rate=16000, mode="per_example"
+            )
+        else:
+            aug = comp_cls(augmentations, sample_rate=16000, mode="per_example")
+
+        audio = torch.randn(batch_size, 1, 1, 1000)
+
+        # WHEN: Called with log=True
+        audio_out, log_list = aug(audio, log=True)
+
+        # THEN: Different examples should have different parameter values (with high probability)
+        # Extract the gain_db values from each example's log
+        gain_values = []
+        for log_dict in log_list:
+            if comp_cls == Compose:
+                gain_db = log_dict["transforms"]["gain"]["parameters"]["gain_db"]
+            elif comp_cls == OneOf:
+                gain_db = log_dict["transform"]["parameters"]["gain_db"]
+            elif comp_cls == SomeOf:
+                gain_db = log_dict["transforms"]["gain"]["parameters"]["gain_db"]
+            gain_values.append(gain_db)
+
+        # With 4 examples and a range of 12dB, very likely to have different values
+        unique_gains = len(set(gain_values))
+        assert unique_gains > 1, (
+            f"Expected different gains per example in per_example mode, "
+            f"got all same: {gain_values}"
+        )
 
 
 class TestPeakFilterCompositionLogging:

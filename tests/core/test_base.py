@@ -8,6 +8,59 @@ import pytest
 import torch
 
 from tests.conftest import MockAugmentation
+from auementations.core.base import BaseAugmentation
+from auementations.core.parameters import ParameterSampler
+
+
+class AddOneParametrized(BaseAugmentation):
+    def __init__(self, amount: int | list[int] = 1, **kwargs):
+        super().__init__(**kwargs)
+        self.amount_spec = amount
+
+    def randomize_parameters(self):
+        result = {}
+        self.amount = None
+        if isinstance(self.amount_spec, int):
+            result["amount"] = self.amount_spec
+
+        elif isinstance(self.amount_spec, tuple):
+            result["amount"] = ParameterSampler.sample(self.amount_spec)
+        self.amount = result["amount"]
+        return result
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.amount
+
+
+class TestApplyFunctionBasedOnMode:
+    @pytest.mark.parametrize("with_log", [False, True])
+    def test_per_batch(self, with_log):
+        batch = torch.zeros(4, 1, 1, 10)
+
+        amount = 1
+        aug = AddOneParametrized(amount, sample_rate=16000, mode="per_batch")
+        output = aug(batch, log=with_log)
+        if with_log:
+            output, log = output
+
+            assert log["parameters"]["amount"] == amount
+
+        assert (output == 1).all()
+
+    @pytest.mark.parametrize("with_log", [False, True])
+    def test_per_example(self, with_log):
+        batch = torch.zeros(4, 1, 1, 5)
+
+        amount = (1, 4)
+        aug = AddOneParametrized(amount, sample_rate=16000, mode="per_example")
+        output = aug(batch, log=with_log)
+        if with_log:
+            output, log = output
+
+            assert isinstance(log, list)
+            assert all([x["parameters"]["amount"] > 1 for x in log])
+
+        assert (output > 0).all()
 
 
 class TestBaseAugmentationInitialization:

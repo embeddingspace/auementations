@@ -20,9 +20,7 @@ class MockAugmentation(BaseAugmentation):
         self.gain = gain
         self.apply_count = 0
 
-    def __call__(self, audio, **kwargs):
-        if not self.should_apply():
-            return audio
+    def forward(self, audio):
         self.apply_count += 1
         return audio * self.gain
 

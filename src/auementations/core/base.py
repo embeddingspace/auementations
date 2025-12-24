@@ -75,7 +75,9 @@ class BaseAugmentation(ABC):
         log_obj = None
         output = audio
 
-        if self.mode == "per_example" and len(audio.shape) == 4:
+        # per_example causes the augmentation to be applied
+        # independently over each item in the first dimension.
+        if self.mode == "per_example" and len(audio.shape) > 1:
             log_obj = []
 
             output = audio.clone()

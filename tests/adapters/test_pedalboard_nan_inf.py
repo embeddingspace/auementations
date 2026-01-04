@@ -4,7 +4,9 @@ These tests ensure that PedalboardAdapter properly sanitizes invalid
 values (NaN, inf, -inf) that may be produced by pedalboard effects.
 """
 
+from functools import partial
 import numpy as np
+import torch
 
 
 class MockPedalboardEffect:
@@ -29,23 +31,25 @@ class TestPedalboardAdapterNaNAndInfHandling:
         from auementations.adapters.pedalboard import PedalboardAdapter
 
         sample_rate = 16000
-        audio = np.random.randn(1, 16000).astype(np.float32)
+        audio = torch.randn(1, 1, 16000).to(torch.float32)
 
         # Create adapter with mock effect that returns NaN
         aug = PedalboardAdapter(
-            effect_class=lambda: MockPedalboardEffect(np.full_like(audio, np.nan)),
+            effect_class=lambda: MockPedalboardEffect(
+                partial(np.full_like, fill_value=np.nan)
+            ),
             sample_rate=sample_rate,
             p=1.0,
         )
-        # Override the effect to ensure it returns NaN
-        aug.effect = MockPedalboardEffect(np.full_like(audio, np.nan))
 
         # When
         result = aug(audio)
 
         # Then - all NaN values should be replaced with 0.0
-        assert not np.isnan(result).any(), "Output should not contain NaN values"
-        assert np.allclose(result, 0.0), "NaN values should be replaced with 0.0"
+        assert not torch.isnan(result).any(), "Output should not contain NaN values"
+        assert torch.allclose(result, torch.tensor(0.0)), (
+            "NaN values should be replaced with 0.0"
+        )
 
     def test_given_effect_produces_positive_inf_when_applied_then_returns_valid_values(
         self,
@@ -55,21 +59,22 @@ class TestPedalboardAdapterNaNAndInfHandling:
         from auementations.adapters.pedalboard import PedalboardAdapter
 
         sample_rate = 16000
-        audio = np.random.randn(1, 16000).astype(np.float32)
+        audio = torch.randn(1, 16000).to(torch.float32)
 
         aug = PedalboardAdapter(
-            effect_class=lambda: MockPedalboardEffect(np.full_like(audio, np.inf)),
+            effect_class=lambda: MockPedalboardEffect(
+                partial(np.full_like, fill_value=np.inf)
+            ),
             sample_rate=sample_rate,
             p=1.0,
         )
-        aug.effect = MockPedalboardEffect(np.full_like(audio, np.inf))
 
         # When
         result = aug(audio)
 
         # Then - all positive inf values should be replaced with 1.0
-        assert not np.isinf(result).any(), "Output should not contain inf values"
-        assert np.allclose(result, 1.0), (
+        assert not torch.isinf(result).any(), "Output should not contain inf values"
+        assert torch.allclose(result, torch.tensor(1.0)), (
             "Positive inf values should be replaced with 1.0"
         )
 
@@ -81,21 +86,22 @@ class TestPedalboardAdapterNaNAndInfHandling:
         from auementations.adapters.pedalboard import PedalboardAdapter
 
         sample_rate = 16000
-        audio = np.random.randn(1, 16000).astype(np.float32)
+        audio = torch.randn(1, 16000).to(torch.float32)
 
         aug = PedalboardAdapter(
-            effect_class=lambda: MockPedalboardEffect(np.full_like(audio, -np.inf)),
+            effect_class=lambda: MockPedalboardEffect(
+                partial(np.full_like, fill_value=-np.inf)
+            ),
             sample_rate=sample_rate,
             p=1.0,
         )
-        aug.effect = MockPedalboardEffect(np.full_like(audio, -np.inf))
 
         # When
         result = aug(audio)
 
         # Then - all negative inf values should be replaced with -1.0
-        assert not np.isinf(result).any(), "Output should not contain inf values"
-        assert np.allclose(result, -1.0), (
+        assert not torch.isinf(result).any(), "Output should not contain inf values"
+        assert torch.allclose(result, torch.tensor(-1.0)), (
             "Negative inf values should be replaced with -1.0"
         )
 
@@ -107,34 +113,42 @@ class TestPedalboardAdapterNaNAndInfHandling:
         from auementations.adapters.pedalboard import PedalboardAdapter
 
         sample_rate = 16000
-        audio = np.random.randn(2, 16000).astype(np.float32)
+        audio = torch.randn(2, sample_rate)
 
         # Create output with mixed invalid values
-        invalid_output = np.zeros_like(audio)
-        invalid_output[0, :4000] = np.nan  # First quarter: NaN
-        invalid_output[0, 4000:8000] = np.inf  # Second quarter: +inf
-        invalid_output[0, 8000:12000] = -np.inf  # Third quarter: -inf
-        invalid_output[0, 12000:] = 0.5  # Last quarter: valid
-        invalid_output[1, :] = audio[1, :]  # Second channel: copy input
+        def fn(audio):
+            invalid_output = np.zeros_like(audio)
+            invalid_output[:4000] = np.nan  # First quarter: NaN
+            invalid_output[4000:8000] = np.inf  # Second quarter: +inf
+            invalid_output[8000:12000] = -np.inf  # Third quarter: -inf
+            invalid_output[12000:] = 0.5  # Last quarter: valid
+            return invalid_output
 
         aug = PedalboardAdapter(
-            effect_class=lambda: MockPedalboardEffect(invalid_output.copy()),
+            effect_class=lambda: MockPedalboardEffect(fn),
             sample_rate=sample_rate,
             p=1.0,
         )
-        aug.effect = MockPedalboardEffect(invalid_output.copy())
 
         # When
         result = aug(audio)
 
         # Then - no invalid values in output
-        assert not np.isnan(result).any(), "Output should not contain NaN"
-        assert not np.isinf(result).any(), "Output should not contain inf"
+        assert not torch.isnan(result).any(), "Output should not contain NaN"
+        assert not torch.isinf(result).any(), "Output should not contain inf"
         # Check expected replacements in first channel
-        assert np.allclose(result[0, :4000], 0.0), "NaN should become 0.0"
-        assert np.allclose(result[0, 4000:8000], 1.0), "+inf should become 1.0"
-        assert np.allclose(result[0, 8000:12000], -1.0), "-inf should become -1.0"
-        assert np.allclose(result[0, 12000:], 0.5), "Valid values should be preserved"
+        assert torch.allclose(result[0, :4000], torch.tensor(0.0)), (
+            "NaN should become 0.0"
+        )
+        assert torch.allclose(result[0, 4000:8000], torch.tensor(1.0)), (
+            "+inf should become 1.0"
+        )
+        assert torch.allclose(result[0, 8000:12000], torch.tensor(-1.0)), (
+            "-inf should become -1.0"
+        )
+        assert torch.allclose(result[0, 12000:], torch.tensor(0.5)), (
+            "Valid values should be preserved"
+        )
 
     def test_given_torch_tensor_with_invalid_values_when_applied_then_returns_valid_tensor(
         self,
@@ -157,7 +171,6 @@ class TestPedalboardAdapterNaNAndInfHandling:
             sample_rate=sample_rate,
             p=1.0,
         )
-        aug.effect = MockPedalboardEffect(invalid_output.copy())
 
         # When
         result = aug(audio)
@@ -177,7 +190,7 @@ class TestPedalboardAdapterNaNAndInfHandling:
 
         sample_rate = 16000
         batch_size = 3
-        audio = np.random.randn(batch_size, 1, 8000).astype(np.float32)
+        audio = torch.randn(batch_size, 1, 8000).float()
 
         # Create a function that returns different invalid values for each call
         call_count = [0]
@@ -198,14 +211,19 @@ class TestPedalboardAdapterNaNAndInfHandling:
             p=1.0,
             seed=42,
         )
-        aug.effect = MockPedalboardEffect(get_invalid_output)
 
         # When
         result = aug(audio)
 
         # Then
-        assert not np.isnan(result).any(), "Output should not contain NaN"
-        assert not np.isinf(result).any(), "Output should not contain inf"
-        assert np.allclose(result[0], 0.0), "First batch NaN should become 0.0"
-        assert np.allclose(result[1], 1.0), "Second batch +inf should become 1.0"
-        assert np.allclose(result[2], -1.0), "Third batch -inf should become -1.0"
+        assert not torch.isnan(result).any(), "Output should not contain NaN"
+        assert not torch.isinf(result).any(), "Output should not contain inf"
+        assert torch.allclose(result[0], torch.tensor(0.0)), (
+            "First batch NaN should become 0.0"
+        )
+        assert torch.allclose(result[1], torch.tensor(1.0)), (
+            "Second batch +inf should become 1.0"
+        )
+        assert torch.allclose(result[2], torch.tensor(-1.0)), (
+            "Third batch -inf should become -1.0"
+        )

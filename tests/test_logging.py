@@ -4,16 +4,24 @@ import pytest
 import torch
 
 from auementations.adapters.custom import GainAugmentation, NoiseAugmentation
+from auementations.adapters.pedalboard import LowPassFilter, PeakFilter
 from auementations.core.composition import Compose, OneOf, SomeOf
 
 
-@pytest.mark.parametrize("aug_cls", [GainAugmentation, NoiseAugmentation])
+@pytest.mark.parametrize(
+    "aug_cls,aug_kwargs",
+    [
+        (GainAugmentation, dict(min_gain_db=-6.0, max_gain_db=6.0)),
+        (NoiseAugmentation, dict(min_gain_db=-6.0, max_gain_db=6.0)),
+        (LowPassFilter, dict(min_cutoff_freq=80, max_cutoff_freq=200)),
+    ],
+)
 class TestSimpleAugmentationLogging:
     """Tests for logging in simple augmentations."""
 
-    def test_call_without_log_returns_only_audio(self, aug_cls):
+    def test_call_without_log_returns_only_audio(self, aug_cls, aug_kwargs):
         # GIVEN: A simple augmentation
-        aug = aug_cls(min_gain_db=-6.0, max_gain_db=6.0, p=1.0, seed=42)
+        aug = aug_cls(p=1.0, seed=42, sample_rate=16000, **aug_kwargs)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called without log parameter
@@ -23,9 +31,9 @@ class TestSimpleAugmentationLogging:
         assert isinstance(result, torch.Tensor)
         assert result.shape == audio.shape
 
-    def test_call_with_log_false_returns_only_audio(self, aug_cls):
+    def test_call_with_log_false_returns_only_audio(self, aug_cls, aug_kwargs):
         # GIVEN: A simple augmentation
-        aug = aug_cls(min_gain_db=-6.0, max_gain_db=6.0, p=1.0, seed=42)
+        aug = aug_cls(p=1.0, seed=42, sample_rate=16000, **aug_kwargs)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=False
@@ -35,11 +43,9 @@ class TestSimpleAugmentationLogging:
         assert isinstance(result, torch.Tensor)
         assert result.shape == audio.shape
 
-    def test_call_with_log_true_returns_audio_and_dict(self, aug_cls):
+    def test_call_with_log_true_returns_audio_and_dict(self, aug_cls, aug_kwargs):
         # GIVEN: A simple augmentation in per_batch mode (single dict output)
-        aug = aug_cls(
-            min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
-        )
+        aug = aug_cls(**aug_kwargs, p=1.0, sample_rate=16000, mode="per_batch", seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=True
@@ -52,11 +58,11 @@ class TestSimpleAugmentationLogging:
         assert isinstance(audio_out, torch.Tensor)
         assert isinstance(log_dict, dict)
 
-    def test_log_dict_contains_augmentation_name_and_parameters(self, aug_cls):
+    def test_log_dict_contains_augmentation_name_and_parameters(
+        self, aug_cls, aug_kwargs
+    ):
         # GIVEN: A simple augmentation with fixed parameters in per_batch mode
-        aug = aug_cls(
-            min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
-        )
+        aug = aug_cls(**aug_kwargs, sample_rate=16000, p=1.0, mode="per_batch", seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=True
@@ -70,11 +76,9 @@ class TestSimpleAugmentationLogging:
         # Should contain the actual sampled gain value
         assert "gain_db" in log_dict["parameters"]
 
-    def test_log_contains_actual_sampled_parameters(self, aug_cls):
+    def test_log_contains_actual_sampled_parameters(self, aug_cls, aug_kwargs):
         # GIVEN: An augmentation with a range parameter in per_batch mode
-        aug = aug_cls(
-            min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
-        )
+        aug = aug_cls(**aug_kwargs, sample_rate=16000, p=1.0, mode="per_batch", seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called multiple times with log=True
@@ -91,9 +95,9 @@ class TestSimpleAugmentationLogging:
         # Note: GainAugmentation limits gain based on signal level to prevent clipping
         # We just verify that we get numeric values, not specific ranges
 
-    def test_log_is_none_when_augmentation_not_applied(self, aug_cls):
+    def test_log_is_none_when_augmentation_not_applied(self, aug_cls, aug_kwargs):
         # GIVEN: An augmentation with p=0 (never applies)
-        aug = aug_cls(min_gain_db=-6.0, max_gain_db=6.0, p=0.0, seed=42)
+        aug = aug_cls(**aug_kwargs, sample_rate=16000, p=0.0, seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=True
@@ -104,11 +108,11 @@ class TestSimpleAugmentationLogging:
         # Audio should be unchanged
         assert torch.allclose(audio_out, audio)
 
-    def test_log_is_present_when_augmentation_applied_with_probability(self, aug_cls):
+    def test_log_is_present_when_augmentation_applied_with_probability(
+        self, aug_cls, aug_kwargs
+    ):
         # GIVEN: An augmentation with p=1.0 (always applies) in per_batch mode
-        aug = aug_cls(
-            min_gain_db=-6.0, max_gain_db=6.0, p=1.0, mode="per_batch", seed=42
-        )
+        aug = aug_cls(**aug_kwargs, sample_rate=16000, p=1.0, mode="per_batch", seed=42)
         audio = torch.randn(1, 1000)
 
         # WHEN: Called with log=True
@@ -709,7 +713,6 @@ class TestPeakFilterCompositionLogging:
     def test_peak_filter_in_someof_with_logging(self):
         """GIVEN PeakFilter in SomeOf, WHEN called with log=True, THEN should return log."""
         # GIVEN: A SomeOf composition containing PeakFilter
-        from auementations.adapters.pedalboard import PeakFilter
 
         aug = SomeOf(
             k=1,
@@ -746,7 +749,6 @@ class TestPeakFilterCompositionLogging:
     def test_peak_filter_in_oneof_with_logging(self):
         """GIVEN PeakFilter in OneOf, WHEN called with log=True, THEN should return log."""
         # GIVEN: A OneOf composition containing PeakFilter
-        from auementations.adapters.pedalboard import PeakFilter
 
         aug = OneOf(
             augmentations={

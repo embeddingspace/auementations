@@ -1,8 +1,10 @@
 """Adapters for torch_audiomentations library."""
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
-import numpy as np
+import torch
+from torch import Tensor
+from einops import rearrange
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
@@ -39,6 +41,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
         sample_rate: int | float,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
         **params,
     ):
         """Initialize adapter.
@@ -50,7 +53,7 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
             seed: Random seed.
             **params: Transform-specific parameters (can include ranges).
         """
-        super().__init__(sample_rate=sample_rate, p=p, seed=seed)
+        super().__init__(sample_rate=sample_rate, p=p, seed=seed, mode=mode)
 
         torch, _ = _lazy_import_torch_audiomentations()
         self.torch = torch
@@ -61,7 +64,6 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
 
         # Initialize transform with resolved parameters
         self.randomize_parameters()
-        self._init_transform()
 
     def _init_transform(self):
         """Initialize the underlying torch_audiomentations transform."""
@@ -82,59 +84,8 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
             else:
                 self.current_params[key] = value
 
-    def __call__(self, audio: Union[np.ndarray, Any], log: bool = False, **kwargs):
-        """Apply augmentation.
-
-        Args:
-            audio: Input audio as numpy array or torch tensor.
-                   Shape: (batch, channels, samples) or (channels, samples) or (samples,)
-            log: If True, return (audio, log_dict). If False, return audio only.
-            **kwargs: Additional parameters.
-
-        Returns:
-            If log=False: Augmented audio in same format as input.
-            If log=True: Tuple of (augmented_audio, log_dict).
-        """
-        if not self.should_apply():
-            if log:
-                return audio, None
-            return audio
-
-        # Convert to torch tensor if needed
-        was_numpy = isinstance(audio, np.ndarray)
-        if was_numpy:
-            audio_tensor = self.torch.from_numpy(audio).float()
-        else:
-            audio_tensor = audio
-
-        # Ensure we have batch dimension
-        original_shape = audio_tensor.shape
-        if audio_tensor.ndim == 1:
-            # (samples,) -> (1, 1, samples)
-            audio_tensor = audio_tensor.unsqueeze(0).unsqueeze(0)
-        elif audio_tensor.ndim == 2:
-            # (channels, samples) -> (1, channels, samples)
-            audio_tensor = audio_tensor.unsqueeze(0)
-
-        # Apply transform
-        augmented = self.transform(audio_tensor, sample_rate=self.sample_rate)
-
-        # Restore original shape
-        if len(original_shape) == 1:
-            augmented = augmented.squeeze(0).squeeze(0)
-        elif len(original_shape) == 2:
-            augmented = augmented.squeeze(0)
-
-        # Convert back to numpy if needed
-        if was_numpy:
-            augmented = augmented.numpy()
-
-        if not log:
-            return augmented
-
-        # Create log dict with current parameters
-        log_dict = self._create_log_dict(self.current_params)
-        return augmented, log_dict
+        self._init_transform()
+        return self.current_params
 
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
@@ -144,6 +95,23 @@ class TorchAudiomentationsAdapter(BaseAugmentation):
         )
         config.update(self.param_specs)
         return config
+
+    def forward(self, audio: Tensor) -> Tensor:
+        audio = torch.as_tensor(audio)
+
+        match audio.ndim:
+            case 1:
+                audio = rearrange(audio, "t -> 1 1 t")
+                augmented = self.transform(audio)
+                augmented = rearrange(augmented, "1 1 t -> t")
+            case 2:
+                audio = rearrange(audio, "b t -> b 1 t")
+                augmented = self.transform(audio)
+                augmented = rearrange(audio, "b 1 t -> b t")
+            case _:
+                augmented = self.transform(audio)
+
+        return augmented
 
 
 # Convenience wrappers for common torch_audiomentations transforms
@@ -167,6 +135,7 @@ class Gain(TorchAudiomentationsAdapter):
         max_gain_db: float = 12.0,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
     ):
         _, torch_audiomentations = _lazy_import_torch_audiomentations()
         super().__init__(
@@ -174,6 +143,7 @@ class Gain(TorchAudiomentationsAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             min_gain_in_db=min_gain_db,
             max_gain_in_db=max_gain_db,
         )
@@ -197,6 +167,7 @@ class PitchShift(TorchAudiomentationsAdapter):
         max_semitones: float = 4.0,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
     ):
         _, torch_audiomentations = _lazy_import_torch_audiomentations()
         super().__init__(
@@ -204,6 +175,7 @@ class PitchShift(TorchAudiomentationsAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             min_transpose_semitones=min_semitones,
             max_transpose_semitones=max_semitones,
         )
@@ -233,6 +205,7 @@ class AddColoredNoise(TorchAudiomentationsAdapter):
         max_f_decay: float = 2.0,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
     ):
         _, torch_audiomentations = _lazy_import_torch_audiomentations()
         super().__init__(
@@ -240,6 +213,7 @@ class AddColoredNoise(TorchAudiomentationsAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             min_snr_in_db=min_snr_db,
             max_snr_in_db=max_snr_db,
             min_f_decay=min_f_decay,
@@ -265,6 +239,7 @@ class HighPassFilter(TorchAudiomentationsAdapter):
         max_cutoff_freq: float = 2400.0,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
     ):
         _, torch_audiomentations = _lazy_import_torch_audiomentations()
         super().__init__(
@@ -272,6 +247,7 @@ class HighPassFilter(TorchAudiomentationsAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             min_cutoff_freq=min_cutoff_freq,
             max_cutoff_freq=max_cutoff_freq,
         )
@@ -295,6 +271,7 @@ class LowPassFilter(TorchAudiomentationsAdapter):
         max_cutoff_freq: float = 7500.0,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
     ):
         _, torch_audiomentations = _lazy_import_torch_audiomentations()
         super().__init__(
@@ -302,6 +279,7 @@ class LowPassFilter(TorchAudiomentationsAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             min_cutoff_freq=min_cutoff_freq,
             max_cutoff_freq=max_cutoff_freq,
         )
@@ -325,6 +303,7 @@ class TimeStretch(TorchAudiomentationsAdapter):
         max_rate: float = 1.25,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
     ):
         _, torch_audiomentations = _lazy_import_torch_audiomentations()
         super().__init__(
@@ -332,6 +311,7 @@ class TimeStretch(TorchAudiomentationsAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             min_rate=min_rate,
             max_rate=max_rate,
         )

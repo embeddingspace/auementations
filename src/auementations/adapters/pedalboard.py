@@ -75,7 +75,7 @@ class PedalboardAdapter(BaseAugmentation):
         for key, value in self.param_specs.items():
             # Check if this is a range parameter
             if isinstance(value, (tuple, dict)):
-                self.current_params[key] = ParameterSampler.sample(value)
+                self.current_params[key] = ParameterSampler.sample(value, self.rng)
             else:
                 self.current_params[key] = value
 

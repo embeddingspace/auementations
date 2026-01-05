@@ -24,7 +24,7 @@ class AddOneParametrized(BaseAugmentation):
             result["amount"] = self.amount_spec
 
         elif isinstance(self.amount_spec, tuple):
-            result["amount"] = ParameterSampler.sample(self.amount_spec)
+            result["amount"] = ParameterSampler.sample(self.amount_spec, self.rng)
         self.amount = result["amount"]
         return result
 

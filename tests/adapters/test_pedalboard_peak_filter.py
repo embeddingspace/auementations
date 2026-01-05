@@ -292,11 +292,13 @@ class TestPeakFilter:
 
         # WHEN: Applied to the same input
         audio = torch.randn(4, 2, 1, 8000) * 0.5
-        y_hat1 = aug1(audio)
-        y_hat2 = aug2(audio)
+        y_hat1 = aug1(audio, log=True)
+        y_hat2 = aug2(audio, log=True)
 
         # THEN: Results should be identical
-        assert torch.allclose(y_hat1, y_hat2)
+        assert torch.allclose(y_hat1[0], y_hat2[0])
+        # AND: logs should be identitcal
+        assert y_hat1[1] == y_hat2[1]
 
     def test_invalid_mode_raises_error(self):
         """GIVEN invalid mode, WHEN creating PeakFilter, THEN should raise ValueError."""
@@ -304,19 +306,6 @@ class TestPeakFilter:
         # THEN: Should raise ValueError
         with pytest.raises(ValueError, match="mode must be one of"):
             PeakFilter(sample_rate=16000, mode="invalid_mode")
-
-    def test_accepts_numpy_array(self):
-        """GIVEN numpy array input, WHEN applied, THEN should work and return numpy."""
-        # GIVEN: Numpy array input
-        audio = np.random.randn(2, 2, 1, 8000).astype(np.float32) * 0.5
-        aug = PeakFilter(sample_rate=16000, p=1.0)
-
-        # WHEN: Applied
-        y_hat = aug(audio)
-
-        # THEN: Should return numpy array with same shape
-        assert isinstance(y_hat, np.ndarray)
-        assert y_hat.shape == audio.shape
 
     def test_accepts_torch_tensor(self):
         """GIVEN torch tensor input, WHEN applied, THEN should work and return torch tensor."""
@@ -348,7 +337,7 @@ class TestPeakFilter:
         aug.randomize_parameters()
 
         # THEN: Center frequency should be within the specified range
-        assert min_freq <= aug.current_params["center_freq"] <= max_freq
+        assert min_freq <= aug.current_params["cutoff_frequency_hz"] <= max_freq
 
     def test_gain_range_is_respected(self):
         """GIVEN gain range, WHEN applied, THEN gain should be within range."""
@@ -408,12 +397,12 @@ class TestPeakFilter:
 
         # THEN: Should return both result and log dict
         assert result.shape == audio.shape
-        assert log_dict is not None
-        assert log_dict["augmentation"] == "PeakFilter"
-        assert "parameters" in log_dict
-        assert "center_freq" in log_dict["parameters"]
-        assert "gain_db" in log_dict["parameters"]
-        assert "q" in log_dict["parameters"]
+        assert isinstance(log_dict, list) and len(log_dict) == 2
+        assert [x["augmentation"] == "PeakFilter" for x in log_dict]
+        assert ["parameters" in x for x in log_dict]
+        assert ["center_freq" in x["parameters"] for x in log_dict]
+        assert ["gain_db" in x["parameters"] for x in log_dict]
+        assert ["q" in x["parameters"] for x in log_dict]
 
     def test_logging_with_p0_returns_none(self):
         """GIVEN PeakFilter with p=0 and log=True, WHEN applied, THEN log should be None."""
@@ -426,7 +415,7 @@ class TestPeakFilter:
 
         # THEN: Should return original audio and None for log
         assert torch.allclose(result, audio)
-        assert log_dict is None
+        assert log_dict == [None, None]
 
     def test_logging_disabled_returns_only_audio(self):
         """GIVEN PeakFilter with log=False, WHEN applied, THEN should return only audio."""

@@ -52,8 +52,7 @@ class BaseAugmentation(ABC):
         self.p = p
         self.seed = seed
 
-        if seed is not None:
-            np.random.seed(seed)
+        self.rng = np.random.default_rng(seed=seed)
 
     def __call__(
         self, audio: Tensor, log: bool = False, **kwargs
@@ -129,7 +128,7 @@ class BaseAugmentation(ABC):
         Returns:
             True if augmentation should be applied, False otherwise.
         """
-        return np.random.random() < self.p
+        return self.rng.random() < self.p
 
     def _create_log_dict(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Create a log dictionary for this augmentation.

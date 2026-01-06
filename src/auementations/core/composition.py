@@ -2,14 +2,104 @@
 
 from typing import Any, Dict, List, Optional, Union
 
-import torch
+from torch import Tensor
 
 from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
 
 
+class Composition(BaseAugmentation):
+    """Base class for composition augmentations."""
+
+    VALID_MODES = ["per_batch", "per_example"]
+
+    def __init__(
+        self,
+        augmentations: dict[str, BaseAugmentation],
+        sample_rate: int | float | None = None,
+        p: float = 1.0,
+        mode: str = "per_example",
+        seed: Optional[int] = None,
+    ):
+        if not augmentations:
+            raise ValueError("augmentations list cannot be empty")
+
+        # Convert dict to list while preserving order and store names
+        self.augmentations = augmentations
+
+        aug_list = list(self.augmentations.values())
+
+        # Infer sample_rate from first augmentation if not provided
+        if sample_rate is None and aug_list[0].sample_rate is not None:
+            sample_rate = aug_list[0].sample_rate
+
+        super().__init__(sample_rate=sample_rate, p=p, seed=seed, mode=mode)
+
+        # Validate that all augmentations have compatible sample rates
+        augmentation_sample_rates = {
+            aug.sample_rate for aug in aug_list if aug.sample_rate is not None
+        }
+        if len(augmentation_sample_rates) > 1:
+            raise ValueError(
+                f"All augmentations must have same sample_rate. "
+                f"Expected {self.sample_rate}, got {augmentation_sample_rates}"
+            )
+
+        # Initialize effect with resolved parameters
+        self.randomize_parameters()
+
+    @property
+    def names(self) -> list[str]:
+        return list(self.augmentations.keys())
+
+    def _init_composition(self):
+        """Chooses how the composition should be applied for this round.
+
+        By default, selects all of them.
+        """
+        return self.names
+
+    def randomize_parameters(self) -> dict[str, Any]:
+        """Sample the augmentations to apply, and get/set parameters for all the children."""
+        self.selected_augmentations = self._init_composition()
+
+        self.current_params = {}
+        for name in self.selected_augmentations:
+            self.current_params[name] = self.augmentations[name].randomize_parameters()
+
+        return self.current_params
+
+    def forward(self, audio: Tensor) -> Tensor:
+        audio_ = audio.clone()
+        for name in self.selected_augmentations:
+            audio_ = self.augmentations[name].forward(audio_)
+
+        return audio_
+
+    def to_config(self) -> Dict[str, Any]:
+        """Export configuration."""
+        config = super().to_config()
+        config["augmentations"] = [
+            aug.to_config() for aug in self.augmentations.values()
+        ]
+        return config
+
+    def __repr__(self) -> str:
+        if self.names:
+            # Show as dict with names
+            items = [
+                f'"{name}": {repr(aug)}' for name, aug in self.augmentations.items()
+            ]
+            aug_reprs = ",\n  ".join(items)
+            return f"{self.__class__.__name__}({{\n  {aug_reprs}\n}})"
+        else:
+            # Show as list
+            aug_reprs = ",\n  ".join(repr(aug) for aug in self.augmentations.values())
+            return f"{self.__class__.__name__}([\n  {aug_reprs}\n])"
+
+
 @auementations_store(name="compose", group="auementations/composition")
-class Compose(BaseAugmentation):
+class Compose(Composition):
     """Sequential composition of augmentations.
 
     Applies multiple augmentations in sequence, passing the output of each
@@ -22,8 +112,6 @@ class Compose(BaseAugmentation):
         ... })
         >>> augmented = compose(audio)
     """
-
-    VALID_MODES = ["per_batch", "per_example"]
 
     def __init__(
         self,
@@ -43,141 +131,13 @@ class Compose(BaseAugmentation):
             mode: Composition mode - "per_example" (independent randomization per batch example) or "per_batch" (same randomization for all).
             seed: Random seed for reproducibility.
         """
-        if not augmentations:
-            raise ValueError("augmentations list cannot be empty")
-
-        # Validate mode
-        if mode not in self.VALID_MODES:
-            raise ValueError(f"mode must be one of {self.VALID_MODES}, got '{mode}'")
-
-        # Convert dict to list while preserving order and store names
-        self.augmentation_names = list(augmentations.keys())
-        aug_list = list(augmentations.values())
-
-        # Infer sample_rate from first augmentation if not provided
-        if sample_rate is None and aug_list[0].sample_rate is not None:
-            sample_rate = aug_list[0].sample_rate
-
-        super().__init__(sample_rate=sample_rate, p=p, seed=seed)
-        self.augmentations = aug_list
-        self.mode = mode
-
-        # Validate that all augmentations have compatible sample rates
-        for i, aug in enumerate(aug_list):
-            if aug.sample_rate != self.sample_rate:
-                name = self.augmentation_names[i] if self.augmentation_names else str(i)
-                raise ValueError(
-                    f"All augmentations must have same sample_rate. "
-                    f"Expected {self.sample_rate}, got {aug.sample_rate} "
-                    f"for augmentation '{name}' ({aug.__class__.__name__})"
-                )
-
-    def __call__(self, audio: torch.Tensor | Any, log: bool = False, **kwargs):
-        """Apply augmentations sequentially.
-
-        Args:
-            audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
-                  - 3D (source, channel, time): single example, returns single dict
-                  - 4D (batch, source, channel, time): defaults to per_example mode (returns list)
-            log: If True, return (audio, log_dict). If False, return audio only.
-            **kwargs: Additional parameters passed to each augmentation.
-
-        Returns:
-            If log=False: Augmented audio.
-            If log=True: Tuple of (augmented_audio, log_dict or list of log_dicts).
-        """
-        if not self.should_apply():
-            if log:
-                return audio, None
-            return audio
-
-        # Determine behavior based on input dimensions
-        # 3D input (source, channel, time): single example, apply like per_batch
-        # 4D input (batch, source, channel, time): check mode
-        is_batch = isinstance(audio, torch.Tensor) and audio.ndim == 4
-        apply_per_example = is_batch and self.mode == "per_example"
-
-        if apply_per_example:
-            # Apply augmentations with independent randomization for each example
-            # Input shape: (batch, source, channel, time)
-            batch_size = audio.shape[0]
-            results = []
-            logs_per_example = [] if log else None
-
-            for i in range(batch_size):
-                # Apply the full sequence to each example independently
-                # audio[i] has shape (source, channel, time)
-                result = audio[i]
-                example_transforms = {}
-
-                for name, augmentation in zip(
-                    self.augmentation_names, self.augmentations
-                ):
-                    augmentation.randomize_parameters()
-                    if log:
-                        result, aug_log = augmentation(result, log=True, **kwargs)
-                        # Only include in log if augmentation was applied
-                        if aug_log is not None:
-                            example_transforms[name] = aug_log
-                    else:
-                        result = augmentation(result, **kwargs)
-
-                results.append(result)
-                if log:
-                    logs_per_example.append(
-                        {"augmentation": "Compose", "transforms": example_transforms}
-                    )
-
-            # Stack results back into batch
-            output = torch.stack(results, dim=0)
-            if log:
-                return output, logs_per_example
-            return output
-        else:
-            # Single example mode: 3D input OR 4D input with mode="per_batch"
-            # Apply same randomization to entire input
-            result = audio
-            transforms = {} if log else None
-
-            for name, augmentation in zip(self.augmentation_names, self.augmentations):
-                augmentation.randomize_parameters()
-                if log:
-                    result, aug_log = augmentation(result, log=True, **kwargs)
-                    # Only include in log if augmentation was applied
-                    if aug_log is not None:
-                        transforms[name] = aug_log
-                else:
-                    result = augmentation(result, **kwargs)
-
-            if log:
-                log_dict = {"augmentation": "Compose", "transforms": transforms}
-                return result, log_dict
-            return result
-
-    def to_config(self) -> Dict[str, Any]:
-        """Export configuration."""
-        config = super().to_config()
-        config["augmentations"] = [aug.to_config() for aug in self.augmentations]
-        config["mode"] = self.mode
-        return config
-
-    def __repr__(self) -> str:
-        if self.augmentation_names:
-            # Show as dict with names
-            items = [
-                f'"{name}": {repr(aug)}'
-                for name, aug in zip(self.augmentation_names, self.augmentations)
-            ]
-            aug_reprs = ",\n  ".join(items)
-            return f"Compose({{\n  {aug_reprs}\n}})"
-        else:
-            # Show as list
-            aug_reprs = ",\n  ".join(repr(aug) for aug in self.augmentations)
-            return f"Compose([\n  {aug_reprs}\n])"
+        super().__init__(
+            augmentations, sample_rate=sample_rate, p=p, mode=mode, seed=seed
+        )
 
 
 @auementations_store(name="one_of", group="auementations/composition")
-class OneOf(BaseAugmentation):
+class OneOf(Composition):
     """Randomly select and apply one augmentation from a list or dict.
 
     Useful for applying mutually exclusive augmentations, like different
@@ -190,8 +150,6 @@ class OneOf(BaseAugmentation):
         ... })
         >>> augmented = one_of(audio)  # Applies exactly one
     """
-
-    VALID_MODES = ["per_batch", "per_example"]
 
     def __init__(
         self,
@@ -214,33 +172,7 @@ class OneOf(BaseAugmentation):
             mode: Composition mode - "per_example" (different aug per batch example) or "per_batch" (same aug for all).
             seed: Random seed for reproducibility.
         """
-        if not augmentations:
-            raise ValueError("augmentations list cannot be empty")
-
-        # Validate mode
-        if mode not in self.VALID_MODES:
-            raise ValueError(f"mode must be one of {self.VALID_MODES}, got '{mode}'")
-
-        # Convert dict to list while preserving order and store names
-        self.augmentation_names = list(augmentations.keys())
         aug_list = list(augmentations.values())
-
-        if sample_rate is None and aug_list[0].sample_rate is not None:
-            sample_rate = aug_list[0].sample_rate
-
-        super().__init__(sample_rate=sample_rate, p=p, seed=seed)
-        self.augmentations = aug_list
-        self.mode = mode
-
-        # Validate sample rates
-        for i, aug in enumerate(aug_list):
-            if aug.sample_rate != self.sample_rate:
-                name = self.augmentation_names[i] if self.augmentation_names else str(i)
-                raise ValueError(
-                    f"All augmentations must have same sample_rate. "
-                    f"Expected {self.sample_rate}, got {aug.sample_rate} "
-                    f"for augmentation '{name}'"
-                )
 
         # Process weights
         if weights is None:
@@ -248,10 +180,10 @@ class OneOf(BaseAugmentation):
         else:
             # Convert dict weights to list
             if isinstance(weights, dict):
-                if self.augmentation_names is None:
+                if self.names is None:
                     raise ValueError("Cannot use dict weights with list augmentations")
                 # Convert dict to list following augmentation order
-                weight_list = [weights[name] for name in self.augmentation_names]
+                weight_list = [weights[name] for name in self.names]
             else:
                 weight_list = weights
 
@@ -264,105 +196,21 @@ class OneOf(BaseAugmentation):
             total = sum(weight_list)
             self.weights = [w / total for w in weight_list]
 
-    def __call__(self, audio: Union[torch.Tensor, Any], log: bool = False, **kwargs):
-        """Apply one randomly selected augmentation.
+        super().__init__(
+            augmentations, sample_rate=sample_rate, p=p, mode=mode, seed=seed
+        )
 
-        Args:
-            audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
-                  - 3D (source, channel, time): single example, returns single dict
-                  - 4D (batch, source, channel, time): defaults to per_example mode (returns list)
-            log: If True, return (audio, log_dict). If False, return audio only.
-            **kwargs: Additional parameters passed to the selected augmentation.
+    def _init_composition(self):
+        return self.rng.choice(self.names, 1, p=self.weights)
 
-        Returns:
-            If log=False: Augmented audio.
-            If log=True: Tuple of (augmented_audio, log_dict or list of log_dicts).
-        """
-        if not self.should_apply():
-            if log:
-                return audio, None
-            return audio
-
-        # Determine behavior based on input dimensions
-        # 3D input (source, channel, time): single example, apply like per_batch
-        # 4D input (batch, source, channel, time): check mode
-        is_batch = isinstance(audio, torch.Tensor) and audio.ndim == 4
-        apply_per_example = is_batch and self.mode == "per_example"
-
-        if apply_per_example:
-            # Apply different augmentation to each example in the batch
-            # Input shape: (batch, source, channel, time)
-            batch_size = audio.shape[0]
-            results = []
-            logs_per_example = [] if log else None
-
-            for i in range(batch_size):
-                # Select one augmentation for this example
-                if self.weights is None:
-                    idx = torch.randint(0, len(self.augmentations), (1,)).item()
-                else:
-                    idx = torch.multinomial(torch.tensor(self.weights), 1).item()
-
-                selected = self.augmentations[idx]
-                selected_name = self.augmentation_names[idx]
-                selected.randomize_parameters()
-                # Apply to single example
-                # audio[i] has shape (source, channel, time)
-                example = audio[i]
-
-                if log:
-                    result, aug_log = selected(example, log=True, **kwargs)
-                    logs_per_example.append(
-                        {
-                            "augmentation": "OneOf",
-                            "selected": selected_name,
-                            "transform": aug_log,
-                        }
-                    )
-                else:
-                    result = selected(example, **kwargs)
-
-                results.append(result)
-
-            # Stack results back into batch
-            output = torch.stack(results, dim=0)
-            if log:
-                return output, logs_per_example
-            return output
-        else:
-            # Single example mode: 3D input OR 4D input with mode="per_batch"
-            # Apply same augmentation to entire input
-            if self.weights is None:
-                idx = torch.randint(0, len(self.augmentations), (1,)).item()
-            else:
-                idx = torch.multinomial(torch.tensor(self.weights), 1).item()
-
-            selected = self.augmentations[idx]
-            selected_name = self.augmentation_names[idx]
-            selected.randomize_parameters()
-
-            if log:
-                result, aug_log = selected(audio, log=True, **kwargs)
-                log_dict = {
-                    "augmentation": "OneOf",
-                    "selected": selected_name,
-                    "transform": aug_log,
-                }
-                return result, log_dict
-            return selected(audio, **kwargs)
-
-    def to_config(self) -> Dict[str, Any]:
-        """Export configuration."""
+    def to_config(self) -> dict[str, Any]:
         config = super().to_config()
-        config["augmentations"] = [aug.to_config() for aug in self.augmentations]
-        config["mode"] = self.mode
-        if self.weights is not None:
-            config["weights"] = self.weights
+        config["weights"] = self.weights
         return config
 
 
 @auementations_store(name="some_of", group="auementations/composition")
-class SomeOf(BaseAugmentation):
+class SomeOf(Composition):
     """Apply k randomly selected augmentations from a list or dict.
 
     This allows applying multiple random augmentations without applying all of them.
@@ -378,8 +226,6 @@ class SomeOf(BaseAugmentation):
         ... )
         >>> augmented = some_of(audio)  # Applies exactly 2 random augmentations
     """
-
-    VALID_MODES = ["per_batch", "per_example"]
 
     def __init__(
         self,
@@ -405,26 +251,12 @@ class SomeOf(BaseAugmentation):
             mode: Composition mode - "per_example" (different selection per batch example) or "per_batch" (same selection for all).
             seed: Random seed for reproducibility.
         """
-        if not augmentations:
-            raise ValueError("augmentations list cannot be empty")
+        self.replace = replace
 
-        # Validate mode
-        if mode not in self.VALID_MODES:
-            raise ValueError(f"mode must be one of {self.VALID_MODES}, got '{mode}'")
-
-        # Convert dict to list while preserving order and store names
-        self.augmentation_names = list(augmentations.keys())
         aug_list = list(augmentations.values())
 
-        if sample_rate is None and aug_list[0].sample_rate is not None:
-            sample_rate = aug_list[0].sample_rate
-
-        super().__init__(sample_rate=sample_rate, p=p, seed=seed)
-        self.augmentations = aug_list
-        self.replace = replace
-        self.mode = mode
-
         # Validate k
+        self.k = k
         if isinstance(k, int):
             if k < 0:
                 raise ValueError(f"k must be non-negative, got {k}")
@@ -446,163 +278,18 @@ class SomeOf(BaseAugmentation):
         else:
             raise TypeError(f"k must be int or tuple of two ints, got {type(k)}")
 
-        # Validate sample rates
-        for i, aug in enumerate(aug_list):
-            if aug.sample_rate != self.sample_rate:
-                name = self.augmentation_names[i] if self.augmentation_names else str(i)
-                raise ValueError(
-                    f"All augmentations must have same sample_rate. "
-                    f"Expected {self.sample_rate}, got {aug.sample_rate} "
-                    f"for augmentation '{name}'"
-                )
-
-    def __call__(self, audio: torch.Tensor | Any, log: bool = False, **kwargs):
-        """Apply k randomly selected augmentations.
-
-        Args:
-            audio: Input audio tensor with shape (source, channel, time) or (batch, source, channel, time).
-                  - 3D (source, channel, time): single example, returns single dict
-                  - 4D (batch, source, channel, time): defaults to per_example mode (returns list)
-            log: If True, return (audio, log_dict). If False, return audio only.
-            **kwargs: Additional parameters passed to each augmentation.
-
-        Returns:
-            If log=False: Augmented audio.
-            If log=True: Tuple of (augmented_audio, log_dict or list of log_dicts).
-        """
-        if not self.should_apply():
-            if log:
-                return audio, None
-            return audio
-
-        # Determine behavior based on input dimensions
-        # 3D input (source, channel, time): single example, apply like per_batch
-        # 4D input (batch, source, channel, time): check mode
-        is_batch = isinstance(audio, torch.Tensor) and audio.ndim == 4
-        apply_per_example = is_batch and self.mode == "per_example"
-
-        if apply_per_example:
-            # Apply different k augmentations to each example in the batch
-            # Input shape: (batch, source, channel, time)
-            batch_size = audio.shape[0]
-            results = []
-            logs_per_example = [] if log else None
-
-            for i in range(batch_size):
-                # Determine how many augmentations to apply for this example
-                if self.k_min == self.k_max:
-                    k = self.k_min
-                else:
-                    k = torch.randint(self.k_min, self.k_max + 1, (1,)).item()
-
-                if k == 0:
-                    results.append(audio[i])
-                    if log:
-                        logs_per_example.append(
-                            {"augmentation": "SomeOf", "selected": [], "transforms": {}}
-                        )
-                    continue
-
-                # Select k augmentations for this example
-                if self.replace:
-                    indices = torch.randint(0, len(self.augmentations), (k,))
-                else:
-                    indices = torch.randperm(len(self.augmentations))[:k]
-
-                # Apply selected augmentations sequentially to this example
-                # audio[i] has shape (source, channel, time)
-                result = audio[i]
-                selected_names = []
-                transforms = {} if log else None
-
-                for idx in indices:
-                    idx_val = idx.item()
-                    selected = self.augmentations[idx_val]
-                    selected_name = self.augmentation_names[idx_val]
-                    selected.randomize_parameters()
-
-                    if log:
-                        result, aug_log = selected(result, log=True, **kwargs)
-                        selected_names.append(selected_name)
-                        transforms[selected_name] = aug_log
-                    else:
-                        result = selected(result, **kwargs)
-
-                results.append(result)
-                if log:
-                    logs_per_example.append(
-                        {
-                            "augmentation": "SomeOf",
-                            "selected": selected_names,
-                            "transforms": transforms,
-                        }
-                    )
-
-            # Stack results back into batch
-            output = torch.stack(results, dim=0)
-            if log:
-                return output, logs_per_example
-            return output
-        else:
-            # Single example mode: 3D input OR 4D input with mode="per_batch"
-            # Apply same k augmentations to entire input
-            # Determine how many augmentations to apply
-            if self.k_min == self.k_max:
-                k = self.k_min
-            else:
-                k = torch.randint(self.k_min, self.k_max + 1, (1,)).item()
-
-            if k == 0:
-                if log:
-                    return audio, {
-                        "augmentation": "SomeOf",
-                        "selected": [],
-                        "transforms": {},
-                    }
-                return audio
-
-            # Select k augmentations
-            if self.replace:
-                indices = torch.randint(0, len(self.augmentations), (k,))
-            else:
-                indices = torch.randperm(len(self.augmentations))[:k]
-
-            # Apply selected augmentations sequentially
-            result = audio
-            selected_names = [] if log else None
-            transforms = {} if log else None
-
-            for idx in indices:
-                idx_val = idx.item()
-                selected = self.augmentations[idx_val]
-                selected_name = self.augmentation_names[idx_val]
-                selected.randomize_parameters()
-
-                if log:
-                    result, aug_log = selected(result, log=True, **kwargs)
-                    selected_names.append(selected_name)
-                    transforms[selected_name] = aug_log
-                else:
-                    result = selected(result, **kwargs)
-
-            if log:
-                log_dict = {
-                    "augmentation": "SomeOf",
-                    "selected": selected_names,
-                    "transforms": transforms,
-                }
-                return result, log_dict
-            return result
-
-    def to_config(self) -> Dict[str, Any]:
-        """Export configuration."""
-        config = super().to_config()
-        config["k"] = (
-            self.k_min if self.k_min == self.k_max else (self.k_min, self.k_max)
+        super().__init__(
+            augmentations, sample_rate=sample_rate, p=p, mode=mode, seed=seed
         )
-        config["augmentations"] = [aug.to_config() for aug in self.augmentations]
+
+    def _init_composition(self):
+        n_augmentations = self.rng.integers(self.k_min, self.k_max, endpoint=True)
+        return self.rng.choice(self.names, n_augmentations, replace=self.replace)
+
+    def to_config(self) -> dict[str, Any]:
+        config = super().to_config()
+        config["k"] = self.k
         config["replace"] = self.replace
-        config["mode"] = self.mode
         return config
 
 

@@ -24,7 +24,7 @@ class BaseAugmentation(ABC):
 
     def __init__(
         self,
-        sample_rate: int | float,
+        sample_rate: int | float | None,
         p: float = 1.0,
         mode: str = "per_example",
         seed: Optional[int] = None,
@@ -36,7 +36,9 @@ class BaseAugmentation(ABC):
             p: Probability of applying this augmentation (0.0 to 1.0).
             seed: Random seed for reproducibility. If None, uses global random state.
         """
-        if not isinstance(sample_rate, (int, float)) or sample_rate <= 0:
+        if sample_rate is not None and (
+            not isinstance(sample_rate, (int, float)) or sample_rate <= 0
+        ):
             raise ValueError(
                 f"sample_rate must be a positive integer, got {sample_rate}"
             )
@@ -113,7 +115,7 @@ class BaseAugmentation(ABC):
         """Applies the augmentation to the audio or subset of audio selected by the mode."""
         pass
 
-    def randomize_parameters(self) -> None:
+    def randomize_parameters(self) -> dict[str, Any]:
         """Sample random parameters from configured distributions.
 
         This method is called automatically before each augmentation application
@@ -130,7 +132,7 @@ class BaseAugmentation(ABC):
         """
         return self.rng.random() < self.p
 
-    def _create_log_dict(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_log_dict(self, parameters: dict[str, Any]) -> dict[str, Any]:
         """Create a log dictionary for this augmentation.
 
         Args:
@@ -144,7 +146,7 @@ class BaseAugmentation(ABC):
             "parameters": parameters,
         }
 
-    def to_config(self) -> Dict[str, Any]:
+    def to_config(self) -> dict[str, Any]:
         """Export augmentation configuration as dictionary.
 
         Useful for saving/loading augmentation pipelines and Hydra integration.

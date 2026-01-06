@@ -1,6 +1,6 @@
 """Composition classes for building augmentation pipelines."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from torch import Tensor
 
@@ -44,9 +44,6 @@ class Composition(BaseAugmentation):
                 f"All augmentations must have same sample_rate. "
                 f"Expected {self.sample_rate}, got {augmentation_sample_rates}"
             )
-
-        # Initialize effect with resolved parameters
-        self.randomize_parameters()
 
     @property
     def names(self) -> list[str]:
@@ -136,6 +133,31 @@ class Compose(Composition):
         )
 
 
+def _prepare_weights(
+    weights: list[float] | dict[str, float] | None, names: list[str] | None
+) -> list[float] | None:
+    if weights is None:
+        return None
+    else:
+        # Convert dict weights to list
+        if isinstance(weights, dict):
+            if names is None:
+                raise ValueError("Cannot use dict weights with list augmentations")
+            # Convert dict to list following augmentation order
+            weight_list = [weights[name] for name in names]
+        else:
+            weight_list = weights
+
+        if len(weight_list) != len(names):
+            raise ValueError(
+                f"Number of weights ({len(weight_list)}) must match "
+                f"number of augmentations ({len(names)})"
+            )
+        # Normalize weights
+        total = sum(weight_list)
+        return [w / total for w in weight_list]
+
+
 @auementations_store(name="one_of", group="auementations/composition")
 class OneOf(Composition):
     """Randomly select and apply one augmentation from a list or dict.
@@ -154,7 +176,7 @@ class OneOf(Composition):
     def __init__(
         self,
         augmentations: dict[str, BaseAugmentation],
-        weights: Optional[Union[List[float], Dict[str, float]]] = None,
+        weights: Optional[Union[list[float], dict[str, float]]] = None,
         sample_rate: int | float | None = None,
         p: float = 1.0,
         mode: str = "per_example",
@@ -172,33 +194,13 @@ class OneOf(Composition):
             mode: Composition mode - "per_example" (different aug per batch example) or "per_batch" (same aug for all).
             seed: Random seed for reproducibility.
         """
-        aug_list = list(augmentations.values())
-
-        # Process weights
-        if weights is None:
-            self.weights = None
-        else:
-            # Convert dict weights to list
-            if isinstance(weights, dict):
-                if self.names is None:
-                    raise ValueError("Cannot use dict weights with list augmentations")
-                # Convert dict to list following augmentation order
-                weight_list = [weights[name] for name in self.names]
-            else:
-                weight_list = weights
-
-            if len(weight_list) != len(aug_list):
-                raise ValueError(
-                    f"Number of weights ({len(weight_list)}) must match "
-                    f"number of augmentations ({len(aug_list)})"
-                )
-            # Normalize weights
-            total = sum(weight_list)
-            self.weights = [w / total for w in weight_list]
+        self.augmentations: dict[str, BaseAugmentation]
 
         super().__init__(
             augmentations, sample_rate=sample_rate, p=p, mode=mode, seed=seed
         )
+
+        self.weights = _prepare_weights(weights, self.names)
 
     def _init_composition(self):
         return self.rng.choice(self.names, 1, p=self.weights)
@@ -229,8 +231,9 @@ class SomeOf(Composition):
 
     def __init__(
         self,
-        k: Union[int, tuple],
         augmentations: dict[str, BaseAugmentation],
+        k: Union[int, tuple],
+        weights: Optional[Union[list[float], dict[str, float]]] = None,
         replace: bool = False,
         sample_rate: int | float | None = None,
         p: float = 1.0,
@@ -251,6 +254,7 @@ class SomeOf(Composition):
             mode: Composition mode - "per_example" (different selection per batch example) or "per_batch" (same selection for all).
             seed: Random seed for reproducibility.
         """
+        self.augmentations: dict[str, BaseAugmentation]
         self.replace = replace
 
         aug_list = list(augmentations.values())
@@ -282,9 +286,13 @@ class SomeOf(Composition):
             augmentations, sample_rate=sample_rate, p=p, mode=mode, seed=seed
         )
 
+        self.weights = _prepare_weights(weights, self.names)
+
     def _init_composition(self):
         n_augmentations = self.rng.integers(self.k_min, self.k_max, endpoint=True)
-        return self.rng.choice(self.names, n_augmentations, replace=self.replace)
+        return self.rng.choice(
+            self.names, n_augmentations, p=self.weights, replace=self.replace
+        )
 
     def to_config(self) -> dict[str, Any]:
         config = super().to_config()

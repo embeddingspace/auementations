@@ -44,6 +44,7 @@ class TestRealisticOneOfComposition:
         # This creates a structured config that can be instantiated by Hydra
         composition_config = builds(
             one_of_config,
+            k=(1, 2),
             augmentations={
                 "lowpass": builds(
                     lpf_config,
@@ -94,6 +95,7 @@ class TestRealisticOneOfComposition:
 
         composition_config = builds(
             one_of_config,
+            k=(1, 3),
             augmentations={
                 "lowpass": builds(
                     lpf_config,
@@ -150,6 +152,7 @@ class TestRealisticOneOfComposition:
 
         composition_config = builds(
             one_of_config,
+            k=1,
             augmentations={
                 "lowpass": builds(
                     lpf_config,
@@ -326,6 +329,7 @@ class TestRealisticPeakFilterEQ:
 
         composition_config = builds(
             one_of_config,
+            k=2,
             augmentations=augmentations_dict,
             sample_rate=sample_rate,
             p=1.0,
@@ -376,6 +380,7 @@ class TestRealisticPeakFilterEQ:
         # Create composition with EQ bands
         composition_config = builds(
             one_of_config,
+            k=2,
             augmentations={
                 "lows": builds(
                     peak_filter_config,

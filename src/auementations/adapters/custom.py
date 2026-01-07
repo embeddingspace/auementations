@@ -139,32 +139,49 @@ class NoiseAugmentation(BaseAugmentation):
 
 @auementations_store(name="norm", group="auementations")
 class NormAugmentation(BaseAugmentation):
+    """Apply a normalization to the signal.
+
+    You can apply it as a randon range of norm values by passing a tuple.
+    You can also *only* normalize if the signal is above a threshold by passing
+     a threshold.
+    """
+
     def __init__(
         self,
         sample_rate: int | float | None = None,
         p: float = 1.0,
         mode: str = "per_batch",
         seed: int | None = None,
-        max_signal: float | tuple[float] = 1.0,
+        norm_value: float | tuple[float] = 1.0,
+        threshold: float | None = None,
     ):
         super().__init__(sample_rate=sample_rate, p=p, mode=mode, seed=seed)
 
-        self.max_signal = max_signal
+        self.norm_value = norm_value
+        self.threshold = threshold
 
     def randomize_parameters(self) -> dict[str, Any]:
-        if isinstance(self.max_signal, float):
-            self.selected_max = self.max_signal
-        elif isinstance(self.max_signal, tuple) and len(self.max_signal) == 2:
-            self.selected_max = self.rng.uniform(*self.max_signal)
+        if isinstance(self.norm_value, float):
+            self.selected_max = self.norm_value
+        elif isinstance(self.norm_value, tuple) and len(self.norm_value) == 2:
+            self.selected_max = self.rng.uniform(*self.norm_value)
         else:
             self.selected_max = 1.0
 
-        return {"norm_value": self.selected_max}
+        return {"norm_value": self.selected_max, "threshold": self.threshold}
 
     def forward(self, x):
-        x_maxes = x.amax(dim=-1)
+        x_max = x.amax()
 
-        return x * (self.selected_max / x_maxes)
+        if self.threshold is None or (
+            self.threshold is not None and x_max > self.threshold
+        ):
+            scale_value = self.selected_max / x_max
+
+        else:  # self.threshold is not None:
+            scale_value = 1.0
+
+        return x * scale_value
 
 
 # @auementations_store(name="relative_noise", group="auementations")

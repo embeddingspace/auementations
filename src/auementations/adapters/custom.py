@@ -7,7 +7,7 @@ from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
 from auementations.utils import amplitude_to_db, db_to_amplitude
 
-__all__ = ["GainAugmentation", "NoiseAugmentation"]
+__all__ = ["GainAugmentation", "NoiseAugmentation", "NormAugmentation"]
 
 
 @auementations_store(name="gain", group="auementations")
@@ -135,6 +135,36 @@ class NoiseAugmentation(BaseAugmentation):
         noise_sig = noise_sig * random_gain_in_a
 
         return x + noise_sig
+
+
+@auementations_store(name="norm", group="auementations")
+class NormAugmentation(BaseAugmentation):
+    def __init__(
+        self,
+        sample_rate: int | float | None = None,
+        p: float = 1.0,
+        mode: str = "per_batch",
+        seed: int | None = None,
+        max_signal: float | tuple[float] = 1.0,
+    ):
+        super().__init__(sample_rate=sample_rate, p=p, mode=mode, seed=seed)
+
+        self.max_signal = max_signal
+
+    def randomize_parameters(self) -> dict[str, Any]:
+        if isinstance(self.max_signal, float):
+            self.selected_max = self.max_signal
+        elif isinstance(self.max_signal, tuple) and len(self.max_signal) == 2:
+            self.selected_max = self.rng.uniform(*self.max_signal)
+        else:
+            self.selected_max = 1.0
+
+        return {"norm_value": self.selected_max}
+
+    def forward(self, x):
+        x_maxes = x.amax(dim=-1)
+
+        return x * (self.selected_max / x_maxes)
 
 
 # @auementations_store(name="relative_noise", group="auementations")

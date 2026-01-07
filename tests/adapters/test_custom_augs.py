@@ -4,7 +4,11 @@ import pytest
 import torch
 from hydra_zen import instantiate
 
-from auementations.adapters.custom import GainAugmentation, NoiseAugmentation
+from auementations.adapters.custom import (
+    GainAugmentation,
+    NoiseAugmentation,
+    NormAugmentation,
+)
 from auementations.config.config_store import auementations_store
 from auementations.utils import amplitude_to_db
 
@@ -336,6 +340,29 @@ class TestNoise:
         for noise_gain_ in noise_max_db[1:]:
             # we should see no differences < .2dB.
             assert (noise_db_0 - noise_gain_).abs() > 0.2
+
+
+class TestNormAugmentation:
+    def test_hard_norm_to_1(self):
+        aug = NormAugmentation(max_signal=1.0, mode="per_example")
+        # Signal should have max ~1.2.
+        signal = (torch.rand(2, 1, 1, 400) * 2 - 1) * 1.2
+
+        y_hat = aug(signal)
+
+        signal_max = y_hat.amax(dim=-1)
+        assert (signal_max <= 1.0).all()
+
+    def test_norm_to_max_range(self):
+        max_range = (0.7, 0.9)
+        aug = NormAugmentation(max_signal=max_range, mode="per_example")
+        # Signal should have max ~1.2.
+        signal = (torch.rand(2, 1, 1, 400) * 2 - 1) * 1.5
+
+        y_hat, log = aug(signal, log=True)
+
+        signal_max = y_hat.amax(dim=-1)
+        assert (max_range[0] <= signal_max).all() and (signal_max < max_range[1]).all()
 
 
 @pytest.mark.parametrize("ndim", [2, 3, 4])

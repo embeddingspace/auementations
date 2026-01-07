@@ -304,8 +304,10 @@ class TestComposeLogging:
         assert isinstance(log_dict, dict)
         assert log_dict["augmentation"] == "Compose"
         assert "transforms" in log_dict
-        assert isinstance(log_dict["transforms"], dict)
-        assert all([x in log_dict["transforms"] for x in ["gain", "noise"]])
+        assert isinstance(log_dict["transforms"], list)
+        assert [list(x.keys())[0] for x in log_dict["transforms"]] == log_dict[
+            "parameters"
+        ]
 
     def test_compose_log_contains_all_applied_augmentations(self):
         # GIVEN: A Compose with multiple augmentations (all with p=1.0)
@@ -338,10 +340,9 @@ class TestComposeLogging:
 
         # THEN: transforms dict should contain both augmentations
         transforms = log_dict["transforms"]
-        assert "gain" in transforms
-        assert "noise" in transforms
-        assert transforms["gain"]["augmentation"] == "GainAugmentation"
-        assert transforms["noise"]["augmentation"] == "NoiseAugmentation"
+        assert [list(x.keys())[0] for x in log_dict["transforms"]] == ["gain", "noise"]
+        assert transforms[0]["gain"]["augmentation"] == "GainAugmentation"
+        assert transforms[1]["noise"]["augmentation"] == "NoiseAugmentation"
 
     def test_compose_log_omits_non_applied_augmentations(self):
         # GIVEN: A Compose where one augmentation has p=0 (never applies)
@@ -364,8 +365,8 @@ class TestComposeLogging:
 
         # THEN: transforms dict should only contain the applied augmentation
         transforms = log_dict["transforms"]
-        assert "gain" in transforms
-        assert transforms["noise"] is None  # Omitted because not applied
+        assert "gain" in transforms[0]
+        assert transforms[1]["noise"] is None  # Omitted because not applied
 
 
 class TestOneOfLogging:
@@ -409,8 +410,8 @@ class TestOneOfLogging:
         # Selected should be one of the keys
         assert log_dict["parameters"][0] in ["gain_high", "gain_low"]
         # Transform should be the log from the selected augmentation
-        assert isinstance(log_dict["transforms"], dict)
-        transform_detail = log_dict["transforms"][log_dict["parameters"][0]]
+        assert isinstance(log_dict["transforms"], list)
+        transform_detail = log_dict["transforms"][0][log_dict["parameters"][0]]
         assert transform_detail["augmentation"] == "GainAugmentation"
 
 
@@ -447,11 +448,11 @@ class TestSomeOfLogging:
         assert len(log_dict["parameters"]) == 2
 
         # Transforms should be a dict with the selected augmentations
-        assert isinstance(log_dict["transforms"], dict)
+        assert isinstance(log_dict["transforms"], list)
         assert len(log_dict["transforms"]) == 2
         # Each selected key should be in transforms
-        for key in log_dict["parameters"]:
-            assert key in log_dict["transforms"]
+        transform_keys = [list(x.keys())[0] for x in log_dict["transforms"]]
+        assert log_dict["parameters"] == transform_keys
 
     def test_someof_with_k_equals_zero_returns_empty_log(self):
         # GIVEN: A SomeOf with k=0
@@ -474,7 +475,7 @@ class TestSomeOfLogging:
         # THEN: Log should have empty selected and transforms
         assert log_dict["augmentation"] == "SomeOf"
         assert len(log_dict["parameters"]) == 0
-        assert log_dict["transforms"] == {}
+        assert log_dict["transforms"] == []
 
 
 @pytest.mark.parametrize(
@@ -661,7 +662,7 @@ class TestCompositionPerExampleLogging:
                 assert "transforms" in log_dict, (
                     f"Example {i}: missing 'transforms' key"
                 )
-                assert isinstance(log_dict["transforms"], dict)
+                assert isinstance(log_dict["transforms"], list)
             elif comp_cls == OneOf:
                 assert "parameters" in log_dict, (
                     f"Example {i}: missing 'parameters' key"
@@ -708,7 +709,7 @@ class TestCompositionPerExampleLogging:
         # Extract the gain_db values from each example's log
         gain_values = []
         for log_dict in log_list:
-            gain_db = log_dict["transforms"]["gain"]["parameters"]["gain_db"]
+            gain_db = log_dict["transforms"][0]["gain"]["parameters"]["gain_db"]
             gain_values.append(gain_db)
 
         # With 4 examples and a range of 12dB, very likely to have different values
@@ -753,8 +754,7 @@ class TestPeakFilterCompositionLogging:
             assert "parameters" in log_dict
             assert "peak" in log_dict["parameters"]
             assert "transforms" in log_dict
-            assert "peak" in log_dict["transforms"]
-            peak_logs = log_dict["transforms"]["peak"]
+            peak_logs = log_dict["transforms"][0]["peak"]
             for peak_log in peak_logs:
                 assert peak_log["augmentation"] == "PeakFilter"
                 assert "parameters" in peak_log
@@ -789,7 +789,7 @@ class TestPeakFilterCompositionLogging:
             assert "parameters" in log_dict
             assert log_dict["parameters"] == ["peak"]
             assert "transforms" in log_dict
-            peak_logs = log_dict["transforms"]["peak"]
+            peak_logs = log_dict["transforms"][0]["peak"]
             for peak_log in peak_logs:
                 assert peak_log["augmentation"] == "PeakFilter"
                 assert "parameters" in peak_log

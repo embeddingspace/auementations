@@ -65,14 +65,14 @@ class Composition(BaseAugmentation):
             # Chooses the compositions to apply
             params = self.randomize_parameters()
             log_obj = self._create_log_dict(params)
-            log_obj["transforms"] = {}
+            log_obj["transforms"] = []
 
             # Recursively run should_apply for each selected child augmentation.
             output = audio.clone()
             for name in self.selected_augmentations:
                 aug = self.augmentations[name]
                 output, aug_log = aug(output, log=True)
-                log_obj["transforms"][name] = aug_log
+                log_obj["transforms"].append({name: aug_log})
 
         return output, log_obj
 
@@ -218,7 +218,8 @@ class OneOf(Composition):
         self.weights = _prepare_weights(weights, self.names)
 
     def _init_composition(self):
-        return self.rng.choice(self.names, 1, p=self.weights)
+        choices = self.rng.choice(self.names, 1, p=self.weights)
+        return choices.tolist()
 
     def to_config(self) -> dict[str, Any]:
         config = super().to_config()
@@ -305,9 +306,10 @@ class SomeOf(Composition):
 
     def _init_composition(self):
         n_augmentations = self.rng.integers(self.k_min, self.k_max, endpoint=True)
-        return self.rng.choice(
+        choices = self.rng.choice(
             self.names, n_augmentations, p=self.weights, replace=self.replace
         )
+        return choices.tolist()
 
     def to_config(self) -> dict[str, Any]:
         config = super().to_config()

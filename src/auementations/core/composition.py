@@ -56,22 +56,32 @@ class Composition(BaseAugmentation):
         """
         return self.names
 
+    def randomize_forward_log(
+        self, audio: Tensor
+    ) -> tuple[Tensor, dict[str, Any] | list[dict[str, Any]]]:
+        output, log_obj = audio, None
+        # Composition should_apply.
+        if self.should_apply():
+            # Chooses the compositions to apply
+            params = self.randomize_parameters()
+            log_obj = self._create_log_dict(params)
+            log_obj["transforms"] = {}
+
+            # Recursively run should_apply for each selected child augmentation.
+            output = audio.clone()
+            for name in self.selected_augmentations:
+                aug = self.augmentations[name]
+                output, aug_log = aug(output, log=True)
+                log_obj["transforms"][name] = aug_log
+
+        return output, log_obj
+
     def randomize_parameters(self) -> dict[str, Any]:
         """Sample the augmentations to apply, and get/set parameters for all the children."""
         self.selected_augmentations = self._init_composition()
 
-        self.current_params = {}
-        for name in self.selected_augmentations:
-            self.current_params[name] = self.augmentations[name].randomize_parameters()
-
+        self.current_params = self.selected_augmentations
         return self.current_params
-
-    def forward(self, audio: Tensor) -> Tensor:
-        audio_ = audio.clone()
-        for name in self.selected_augmentations:
-            audio_ = self.augmentations[name].forward(audio_)
-
-        return audio_
 
     def to_config(self) -> Dict[str, Any]:
         """Export configuration."""
@@ -93,6 +103,11 @@ class Composition(BaseAugmentation):
             # Show as list
             aug_reprs = ",\n  ".join(repr(aug) for aug in self.augmentations.values())
             return f"{self.__class__.__name__}([\n  {aug_reprs}\n])"
+
+    def forward(self, audio: Tensor) -> Tensor:
+        raise NotImplementedError(
+            """Unused in favor of calling all children's forward."""
+        )
 
 
 @auementations_store(name="compose", group="auementations/composition")

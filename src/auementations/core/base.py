@@ -56,6 +56,19 @@ class BaseAugmentation(ABC):
 
         self.rng = np.random.default_rng(seed=seed)
 
+    def randomize_forward_log(
+        self, audio: Tensor
+    ) -> tuple[Tensor, dict[str, Any] | list[dict[str, Any]]]:
+        output, log_obj = audio, None
+        if self.should_apply():
+            params = self.randomize_parameters()
+            log_obj = self._create_log_dict(params)
+
+            # Call forward
+            output = self.forward(audio)
+
+        return output, log_obj
+
     def __call__(
         self, audio: Tensor, log: bool = False, **kwargs
     ) -> Tensor | tuple[Tensor, Optional[Dict]]:
@@ -83,12 +96,7 @@ class BaseAugmentation(ABC):
 
             output = audio.clone()
             for i in range(audio.shape[0]):
-                item_log = None
-                if self.should_apply():
-                    params = self.randomize_parameters()
-                    item_log = self._create_log_dict(params)
-
-                    output[i] = self.forward(output[i])
+                output[i], item_log = self.randomize_forward_log(output[i])
                 log_obj.append(item_log)
 
         elif self.mode == "per_source":
@@ -97,14 +105,7 @@ class BaseAugmentation(ABC):
             raise NotImplementedError()
 
         else:  # elif self.mode == "per_batch":
-            log_obj = {}
-
-            if self.should_apply():
-                params = self.randomize_parameters()
-                log_obj = self._create_log_dict(params)
-
-                # Call forward
-                output = self.forward(audio)
+            output, log_obj = self.randomize_forward_log(audio)
 
         if not log:
             return output

@@ -26,7 +26,7 @@ def db_to_power(S_db: Tensor, *, ref: float = 1.0) -> Tensor:
     S : np.ndarray
         Power values
     """
-    return ref * torch.pow(10.0, S_db * 0.1)
+    return ref * torch.pow(10.0, torch.as_tensor(S_db) * 0.1)
 
 
 def db_to_amplitude(S_db: Tensor, *, ref: float = 1.0) -> Tensor:

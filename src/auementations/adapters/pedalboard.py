@@ -158,11 +158,11 @@ class LowPassFilter(PedalboardAdapter):
     def __init__(
         self,
         sample_rate: int | float,
-        cutoff_freq: Optional[float] = None,
-        min_cutoff_freq: Optional[float] = None,
-        max_cutoff_freq: Optional[float] = None,
+        cutoff_freq: float | int | None = None,
+        min_cutoff_freq: float | int | None = None,
+        max_cutoff_freq: float | int | None = None,
         p: float = 1.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         mode: str = "per_example",
     ):
         pedalboard = _lazy_import_pedalboard()
@@ -201,11 +201,11 @@ class HighPassFilter(PedalboardAdapter):
     def __init__(
         self,
         sample_rate: int | float,
-        cutoff_freq: Optional[float] = None,
-        min_cutoff_freq: Optional[float] = None,
-        max_cutoff_freq: Optional[float] = None,
+        cutoff_freq: int | float | None = None,
+        min_cutoff_freq: int | float | None = None,
+        max_cutoff_freq: int | float | None = None,
         p: float = 1.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         mode: str = "per_example",
     ):
         pedalboard = _lazy_import_pedalboard()

@@ -1,8 +1,10 @@
 """Adapters for Spotify's pedalboard library."""
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import numpy as np
+import torch
+from torch import Tensor
 from einops import rearrange
 
 from auementations.config.config_store import auementations_store
@@ -39,6 +41,7 @@ class PedalboardAdapter(BaseAugmentation):
         sample_rate: int | float,
         p: float = 1.0,
         seed: Optional[int] = None,
+        mode: str = "per_example",
         **params,
     ):
         """Initialize adapter.
@@ -50,7 +53,7 @@ class PedalboardAdapter(BaseAugmentation):
             seed: Random seed.
             **params: Effect-specific parameters (can include ranges).
         """
-        super().__init__(sample_rate=sample_rate, p=p, seed=seed)
+        super().__init__(sample_rate=sample_rate, p=p, mode=mode, seed=seed)
 
         pedalboard = _lazy_import_pedalboard()
         self.pedalboard = pedalboard
@@ -61,7 +64,6 @@ class PedalboardAdapter(BaseAugmentation):
 
         # Initialize effect with resolved parameters
         self.randomize_parameters()
-        self._init_effect()
 
     def _init_effect(self):
         """Initialize the underlying pedalboard effect."""
@@ -73,104 +75,48 @@ class PedalboardAdapter(BaseAugmentation):
         for key, value in self.param_specs.items():
             # Check if this is a range parameter
             if isinstance(value, (tuple, dict)):
-                self.current_params[key] = ParameterSampler.sample(value)
+                self.current_params[key] = ParameterSampler.sample(value, self.rng)
             else:
                 self.current_params[key] = value
 
-    def __call__(
-        self, audio: Union[np.ndarray, Any], **kwargs
-    ) -> Union[np.ndarray, Any]:
-        """Apply augmentation.
+        self._init_effect()
+        return self.current_params
 
-        Args:
-            audio: Input audio as numpy array or torch tensor.
-                   Shape: (channels, samples) or (samples,)
-                   or (batch, channels, samples) or (batch, source, channel, samples)
-            **kwargs: Additional parameters.
-
-        Returns:
-            Augmented audio in same format as input.
-        """
-        if not self.should_apply():
-            return audio
-
+    def forward(self, audio: Tensor) -> Tensor:
         # Check if input is torch tensor and convert to numpy
-        was_torch = False
-        try:
-            import torch
-
-            was_torch = isinstance(audio, torch.Tensor)
-            if was_torch:
-                original_device = audio.device
-                audio = audio.cpu().numpy()
-        except ImportError:
-            pass  # torch not available
-
-        # Ensure we have numpy array
-        if not isinstance(audio, np.ndarray):
-            raise TypeError(f"Expected numpy array or torch.Tensor, got {type(audio)}")
+        # -- pedalboard must operate on numpy arrays
+        # of ndim 1 or 2.
+        was_torch = isinstance(audio, torch.Tensor)
+        if was_torch:
+            original_device = audio.device
+            audio = audio.cpu().numpy(force=True)
 
         # Pedalboard expects float32 or float64
         original_dtype = audio.dtype
         if audio.dtype not in (np.float32, np.float64):
             audio = audio.astype(np.float32)
 
-        original_shape = audio.shape
-
-        # Handle batched inputs (3D or 4D) - apply different parameters per example
-        if audio.ndim >= 3:
-            # Process each batch example with different parameters
-            batch_size = audio.shape[0]
-            augmented_list = []
-
-            for i in range(batch_size):
-                # Extract single batch item
-                batch_item = audio[i]
-
-                # Randomize parameters for this example
-                self.randomize_parameters()
-                self._init_effect()
-
-                # Process based on the item's dimensionality
-                # After slicing batch dimension, we have either:
-                # - 2D: (channels, samples) for 3D input
-                # - 3D: (source, channel, samples) for 4D input
-                if batch_item.ndim == 3:  # (source, channel, samples)
-                    # Flatten source and channel dimensions
-                    s, c, t = batch_item.shape
-                    batch_item_flat = rearrange(batch_item, "s c t -> (s c) t")
-                    augmented_item = self.effect.process(
-                        batch_item_flat, sample_rate=self.sample_rate
-                    )
-                    augmented_item = rearrange(
-                        augmented_item, "(s c) t -> s c t", s=s, c=c
-                    )
-                else:  # 2D: (channels, samples)
-                    # Apply directly
-                    augmented_item = self.effect.process(
-                        batch_item, sample_rate=self.sample_rate
-                    )
-
-                augmented_list.append(augmented_item)
-
-            # Stack batch back together
-            augmented = np.stack(augmented_list, axis=0)
-        else:
-            # Non-batched input (1D or 2D)
-            # Ensure we have channel dimension for 1D input
-            if audio.ndim == 1:
-                audio = audio[None, :]
-
-            # Randomize parameters
-            self.randomize_parameters()
-            self._init_effect()
-
-            # Apply effect
-            augmented = self.effect.process(audio, sample_rate=self.sample_rate)
-
-            # Restore original shape for 1D
-            if len(original_shape) == 1:
-                augmented = augmented.squeeze(0)
+        # Process based on the item's dimensionality
+        # After slicing batch dimension, we have either:
+        match audio.ndim:
+            case 4:  # (batch, source, channel, samples)
+                b, s, c, t = audio.shape
+                audio_flat = rearrange(audio, "b s c t -> (b s c) t")
+                augmented = self.effect.process(
+                    audio_flat, sample_rate=self.sample_rate
+                )
+                augmented = rearrange(augmented, "(b s c) t -> b s c t", b=b, s=s, c=c)
+            case 3:  # (source, channel, samples)
+                # Flatten source and channel dimensions
+                s, c, t = audio.shape
+                audio_flat = rearrange(audio, "s c t -> (s c) t")
+                augmented = self.effect.process(
+                    audio_flat, sample_rate=self.sample_rate
+                )
+                augmented = rearrange(augmented, "(s c) t -> s c t", s=s, c=c)
+            case _:  # 2D: (channels, samples)
+                # Apply directly
+                augmented = self.effect.process(audio, sample_rate=self.sample_rate)
 
         # Restore original dtype if needed
         if augmented.dtype != original_dtype:
@@ -178,14 +124,9 @@ class PedalboardAdapter(BaseAugmentation):
 
         # Convert back to torch tensor if needed
         if was_torch:
-            import torch
-
             augmented = torch.from_numpy(augmented).to(original_device)
             # Replace NaN and inf values with valid numbers
             augmented = torch.nan_to_num(augmented, nan=0.0, posinf=1.0, neginf=-1.0)
-        else:
-            # If numpy, use numpy's nan_to_num
-            augmented = np.nan_to_num(augmented, nan=0.0, posinf=1.0, neginf=-1.0)
 
         return augmented
 
@@ -217,11 +158,12 @@ class LowPassFilter(PedalboardAdapter):
     def __init__(
         self,
         sample_rate: int | float,
-        cutoff_freq: Optional[float] = None,
-        min_cutoff_freq: Optional[float] = None,
-        max_cutoff_freq: Optional[float] = None,
+        cutoff_freq: float | int | None = None,
+        min_cutoff_freq: float | int | None = None,
+        max_cutoff_freq: float | int | None = None,
         p: float = 1.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
+        mode: str = "per_example",
     ):
         pedalboard = _lazy_import_pedalboard()
 
@@ -239,6 +181,7 @@ class LowPassFilter(PedalboardAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             cutoff_frequency_hz=cutoff_hz,
         )
 
@@ -258,11 +201,12 @@ class HighPassFilter(PedalboardAdapter):
     def __init__(
         self,
         sample_rate: int | float,
-        cutoff_freq: Optional[float] = None,
-        min_cutoff_freq: Optional[float] = None,
-        max_cutoff_freq: Optional[float] = None,
+        cutoff_freq: int | float | None = None,
+        min_cutoff_freq: int | float | None = None,
+        max_cutoff_freq: int | float | None = None,
         p: float = 1.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
+        mode: str = "per_example",
     ):
         pedalboard = _lazy_import_pedalboard()
 
@@ -280,7 +224,64 @@ class HighPassFilter(PedalboardAdapter):
             sample_rate=sample_rate,
             p=p,
             seed=seed,
+            mode=mode,
             cutoff_frequency_hz=cutoff_hz,
+        )
+
+
+@auementations_store(name="peak_filter", group="auementations/pedalboard")
+class PeakFilter(PedalboardAdapter):
+    """Apply a parametric EQ peak filter (biquad) to audio.
+
+    This augmentation applies a peak filter (also known as a bell filter or peaking EQ)
+    to boost or cut a specific frequency range. It's commonly used for EQ adjustments
+    in audio production.
+
+    Args:
+        sample_rate: Audio sample rate in Hz.
+        min_center_freq: Minimum center frequency in Hz.
+        max_center_freq: Maximum center frequency in Hz.
+        min_gain_db: Minimum gain in dB (negative for cut, positive for boost).
+        max_gain_db: Maximum gain in dB.
+        min_q: Minimum Q factor (bandwidth). Higher Q = narrower filter.
+        max_q: Maximum Q factor.
+        p: Probability of applying the augmentation.
+        mode: How to apply parameters across dimensions:
+            - "per_batch": Same parameters for entire batch
+            - "per_example": Different parameters per batch element (default)
+            - "per_source": Different parameters per source (dim 1)
+            - "per_channel": Different parameters per channel (dim 2)
+        seed: Random seed for reproducibility.
+    """
+
+    def __init__(
+        self,
+        sample_rate: int | float,
+        min_center_freq: float = 200.0,
+        max_center_freq: float = 8000.0,
+        min_gain_db: float = -12.0,
+        max_gain_db: float = 12.0,
+        min_q: float = 0.707,
+        max_q: float = 2.0,
+        p: float = 1.0,
+        mode: str = "per_example",
+        seed: Optional[int] = None,
+    ):
+        pedalboard = _lazy_import_pedalboard()
+
+        center_freq_hz = (min_center_freq, max_center_freq)
+        gain_range_db = (min_gain_db, max_gain_db)
+        q_range = (min_q, max_q)
+
+        super().__init__(
+            effect_class=pedalboard.PeakFilter,
+            sample_rate=sample_rate,
+            p=p,
+            seed=seed,
+            mode=mode,
+            cutoff_frequency_hz=center_freq_hz,
+            gain_db=gain_range_db,
+            q=q_range,
         )
 
 
@@ -288,4 +289,5 @@ __all__ = [
     "PedalboardAdapter",
     "LowPassFilter",
     "HighPassFilter",
+    "PeakFilter",
 ]

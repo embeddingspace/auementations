@@ -4,10 +4,63 @@ These tests follow the Given-When-Then pattern to ensure the base
 augmentation interface works as expected.
 """
 
-import numpy as np
 import pytest
+import torch
 
 from tests.conftest import MockAugmentation
+from auementations.core.base import BaseAugmentation
+from auementations.core.parameters import ParameterSampler
+
+
+class AddOneParametrized(BaseAugmentation):
+    def __init__(self, amount: int | list[int] = 1, **kwargs):
+        super().__init__(**kwargs)
+        self.amount_spec = amount
+
+    def randomize_parameters(self):
+        result = {}
+        self.amount = None
+        if isinstance(self.amount_spec, int):
+            result["amount"] = self.amount_spec
+
+        elif isinstance(self.amount_spec, tuple):
+            result["amount"] = ParameterSampler.sample(self.amount_spec, self.rng)
+        self.amount = result["amount"]
+        return result
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.amount
+
+
+class TestApplyFunctionBasedOnMode:
+    @pytest.mark.parametrize("with_log", [False, True])
+    def test_per_batch(self, with_log):
+        batch = torch.zeros(4, 1, 1, 10)
+
+        amount = 1
+        aug = AddOneParametrized(amount, sample_rate=16000, mode="per_batch")
+        output = aug(batch, log=with_log)
+        if with_log:
+            output, log = output
+
+            assert log["parameters"]["amount"] == amount
+
+        assert (output == 1).all()
+
+    @pytest.mark.parametrize("with_log", [False, True])
+    def test_per_example(self, with_log):
+        batch = torch.zeros(4, 1, 1, 5)
+
+        amount = (1, 4)
+        aug = AddOneParametrized(amount, sample_rate=16000, mode="per_example")
+        output = aug(batch, log=with_log)
+        if with_log:
+            output, log = output
+
+            assert isinstance(log, list)
+            assert all([x["parameters"]["amount"] > 1 for x in log])
+
+        assert (output > 0).all()
 
 
 class TestBaseAugmentationInitialization:
@@ -76,26 +129,26 @@ class TestBaseAugmentationProbabilisticBehavior:
         """Given p=1.0, when augmentation is applied, then it always modifies audio."""
         # Given
         aug = MockAugmentation(sample_rate=16000, gain=2.0, p=1.0)
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert not np.array_equal(result, original)
-        assert np.allclose(result, original * 2.0)
+        assert not torch.equal(result, original)
+        assert torch.allclose(result, original * 2.0)
 
     def test_given_probability_zero_when_applied_then_never_applies(self, mono_audio):
         """Given p=0.0, when augmentation is applied, then it never modifies audio."""
         # Given
         aug = MockAugmentation(sample_rate=16000, gain=2.0, p=0.0)
-        original = mono_audio.copy()
+        original = mono_audio.clone()
 
         # When
         result = aug(mono_audio)
 
         # Then
-        assert np.array_equal(result, original)
+        assert torch.equal(result, original)
 
     def test_given_probability_half_when_applied_many_times_then_applies_approximately_half(
         self, mono_audio

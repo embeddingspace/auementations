@@ -124,24 +124,6 @@ class TestTorchAudiomentationsOutputTypes:
         assert result.shape == audio.shape
 
     @pytest.mark.parametrize("name,aug_class,params", TORCH_AUDIOMENTATIONS)
-    def test_given_numpy_array_when_augmented_then_returns_numpy_array(
-        self, name, aug_class, params
-    ):
-        """Given numpy.ndarray input, when augmentation applied, then returns numpy.ndarray."""
-        # GIVEN: A numpy array and an augmentation
-        audio = np.random.randn(1, 1, 16000).astype(np.float32)
-        augmentation = aug_class(**params)
-
-        # WHEN: Apply augmentation
-        result = augmentation(audio)
-
-        # THEN: Output is a numpy.ndarray
-        assert isinstance(result, np.ndarray), (
-            f"{name} did not return numpy.ndarray for numpy.ndarray input"
-        )
-        assert result.shape == audio.shape
-
-    @pytest.mark.parametrize("name,aug_class,params", TORCH_AUDIOMENTATIONS)
     def test_given_mono_torch_tensor_when_augmented_then_returns_torch_tensor(
         self, name, aug_class, params
     ):
@@ -217,25 +199,6 @@ class TestPedalboardOutputTypes:
             f"{name} did not return torch.Tensor for torch.Tensor input"
         )
         assert result.shape == audio.shape
-
-    @pytest.mark.parametrize("name,aug_class,params", PEDALBOARD_AUGMENTATIONS)
-    def test_given_stereo_numpy_when_augmented_then_returns_numpy_array(
-        self, name, aug_class, params
-    ):
-        """Given stereo numpy.ndarray, when augmentation applied, then returns numpy.ndarray."""
-        # GIVEN: A stereo numpy array (2, samples)
-        audio = np.random.randn(2, 16000).astype(np.float32)
-        augmentation = aug_class(**params)
-
-        # WHEN: Apply augmentation
-        result = augmentation(audio)
-
-        # THEN: Output is a numpy.ndarray with same shape
-        assert isinstance(result, np.ndarray), (
-            f"{name} did not return numpy.ndarray for stereo numpy.ndarray input"
-        )
-        assert result.shape == audio.shape
-        assert result.dtype == audio.dtype
 
     @pytest.mark.parametrize("name,aug_class,params", PEDALBOARD_AUGMENTATIONS)
     def test_given_stereo_torch_tensor_when_augmented_then_returns_torch_tensor(

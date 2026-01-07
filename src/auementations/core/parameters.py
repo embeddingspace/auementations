@@ -1,8 +1,8 @@
 """Parameter sampling utilities for probabilistic augmentations."""
 
 from typing import Any, Dict, Tuple, Union
-import numpy as np
 
+import numpy as np
 
 # Type alias for parameter values that can be single values or ranges
 ParameterValue = Union[float, int, Tuple[float, float], Tuple[int, int], Dict[str, Any]]
@@ -18,7 +18,11 @@ class ParameterSampler:
     """
 
     @staticmethod
-    def sample(value: ParameterValue, dtype: type = float) -> Union[float, int]:
+    def sample(
+        value: ParameterValue,
+        rng: np.random.Generator,
+        dtype: type = float,
+    ) -> float | int:
         """Sample a parameter value.
 
         Args:
@@ -26,17 +30,19 @@ class ParameterSampler:
                 - Single value: returned as-is
                 - Tuple (min, max): uniformly sampled
                 - Dict with 'dist' key: sampled from specified distribution
+            rng: NumPy random generator for reproducible sampling.
             dtype: Target data type (float or int)
 
         Returns:
             Sampled parameter value.
 
         Examples:
-            >>> ParameterSampler.sample(0.5)
+            >>> rng = np.random.default_rng(42)
+            >>> ParameterSampler.sample(0.5, rng)
             0.5
-            >>> ParameterSampler.sample((0.0, 1.0))  # Random value in [0, 1]
+            >>> ParameterSampler.sample((0.0, 1.0), rng)  # Random value in [0, 1]
             0.7234...
-            >>> ParameterSampler.sample({"dist": "log_uniform", "min": 0.01, "max": 1.0})
+            >>> ParameterSampler.sample({"dist": "log_uniform", "min": 0.01, "max": 1.0}, rng)
             0.0543...
         """
         # Single value - no sampling
@@ -49,21 +55,26 @@ class ParameterSampler:
             if min_val > max_val:
                 raise ValueError(f"min ({min_val}) must be <= max ({max_val})")
 
-            sampled = np.random.uniform(min_val, max_val)
+            sampled = rng.uniform(min_val, max_val)
             return dtype(sampled)
 
         # Dictionary distribution spec
         if isinstance(value, dict):
-            return ParameterSampler._sample_from_distribution(value, dtype)
+            return ParameterSampler._sample_from_distribution(value, rng, dtype)
 
         raise TypeError(f"Unsupported parameter type: {type(value)}")
 
     @staticmethod
-    def _sample_from_distribution(spec: Dict[str, Any], dtype: type) -> Union[float, int]:
+    def _sample_from_distribution(
+        spec: Dict[str, Any],
+        rng: np.random.Generator,
+        dtype: type,
+    ) -> float | int:
         """Sample from a distribution specified by a dictionary.
 
         Args:
             spec: Distribution specification with 'dist' key and parameters.
+            rng: NumPy random generator for reproducible sampling.
             dtype: Target data type.
 
         Returns:
@@ -80,7 +91,7 @@ class ParameterSampler:
         if dist == "uniform":
             min_val = spec["min"]
             max_val = spec["max"]
-            sampled = np.random.uniform(min_val, max_val)
+            sampled = rng.uniform(min_val, max_val)
             return dtype(sampled)
 
         elif dist == "log_uniform":
@@ -90,13 +101,13 @@ class ParameterSampler:
                 raise ValueError("log_uniform requires positive min and max values")
             log_min = np.log(min_val)
             log_max = np.log(max_val)
-            sampled = np.exp(np.random.uniform(log_min, log_max))
+            sampled = np.exp(rng.uniform(log_min, log_max))
             return dtype(sampled)
 
         elif dist == "normal":
             mean = spec["mean"]
             std = spec["std"]
-            sampled = np.random.normal(mean, std)
+            sampled = rng.normal(mean, std)
             return dtype(sampled)
 
         elif dist == "truncated_normal":
@@ -108,12 +119,12 @@ class ParameterSampler:
             # Sample until we get a value in range (rejection sampling)
             # Add safety limit to avoid infinite loops
             for _ in range(1000):
-                sampled = np.random.normal(mean, std)
+                sampled = rng.normal(mean, std)
                 if min_val <= sampled <= max_val:
                     return dtype(sampled)
 
             # Fallback to clamping if rejection sampling fails
-            sampled = np.clip(np.random.normal(mean, std), min_val, max_val)
+            sampled = np.clip(rng.normal(mean, std), min_val, max_val)
             return dtype(sampled)
 
         else:
@@ -125,10 +136,10 @@ class ParameterValidator:
 
     @staticmethod
     def validate_range(
-        value: Union[float, int],
-        min_val: Union[float, int, None] = None,
-        max_val: Union[float, int, None] = None,
-        name: str = "parameter"
+        value: float | int,
+        min_val: float | int | None = None,
+        max_val: float | int | None = None,
+        name: str = "parameter",
     ) -> None:
         """Validate that a value is within specified range.
 
@@ -175,16 +186,21 @@ class ParameterValidator:
             raise ValueError(f"sample_rate must be positive, got {sample_rate}")
 
 
-def resolve_parameter(value: ParameterValue, dtype: type = float) -> Union[float, int]:
+def resolve_parameter(
+    value: ParameterValue,
+    rng: np.random.Generator,
+    dtype: type = float,
+) -> Union[float, int]:
     """Convenience function to resolve a parameter value.
 
     This is a shorthand for ParameterSampler.sample().
 
     Args:
         value: Parameter specification.
+        rng: NumPy random generator for reproducible sampling.
         dtype: Target data type.
 
     Returns:
         Resolved parameter value.
     """
-    return ParameterSampler.sample(value, dtype)
+    return ParameterSampler.sample(value, rng, dtype)

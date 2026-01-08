@@ -4,9 +4,13 @@ import pytest
 import torch
 from hydra_zen import instantiate
 
-from auementations.adapters.custom import GainAugmentation, NoiseAugmentation
+from auementations.adapters.custom import (
+    GainAugmentation,
+    NoiseAugmentation,
+    NormAugmentation,
+)
 from auementations.config.config_store import auementations_store
-from auementations.utils import amplitude_to_db
+from auementations.utils import amplitude_to_db, db_to_amplitude
 
 
 def has_uniform_gain(
@@ -287,7 +291,7 @@ class TestGainAugmentation:
 class TestNoise:
     @pytest.mark.parametrize("db_gain", [-100.0, -80.0, -60.0])
     def test_single_value_adds_constant_noise_level_to_input(self, db_gain):
-        aug = NoiseAugmentation(gain_db=db_gain)
+        aug = NoiseAugmentation(gain_db=db_gain, seed=1234)
         signal = torch.zeros(1, 1, 1, 1200)
 
         y_hat = aug(signal)
@@ -298,7 +302,7 @@ class TestNoise:
 
     @pytest.mark.parametrize("amp_gain", [1.0e-8, 1.0e-6, 1.0e-4])
     def test_single_value_amplitude_adds_constant_noise_level_to_input(self, amp_gain):
-        aug = NoiseAugmentation(gain_amp=amp_gain)
+        aug = NoiseAugmentation(gain_amp=amp_gain, seed=1234)
         signal = torch.zeros(1, 1, 1, 1200)
 
         y_hat = aug(signal)
@@ -309,7 +313,10 @@ class TestNoise:
     def test_db_range_batch_mode_produces_noise_no_larger_than_max(self):
         db_range_min, db_range_max = torch.tensor(-100.0), torch.tensor(-80.0)
         aug = NoiseAugmentation(
-            min_gain_db=db_range_min, max_gain_db=db_range_max, mode="per_batch"
+            min_gain_db=db_range_min,
+            max_gain_db=db_range_max,
+            mode="per_batch",
+            seed=1234,
         )
         signal = torch.zeros(1, 1, 1, 1200)
 
@@ -322,20 +329,73 @@ class TestNoise:
     def test_db_range_example_mode_produces_different_gains_per_example(self):
         db_range_min, db_range_max = torch.tensor(-100.0), torch.tensor(-80.0)
         aug = NoiseAugmentation(
-            min_gain_db=db_range_min, max_gain_db=db_range_max, mode="per_example"
+            min_gain_db=db_range_min,
+            max_gain_db=db_range_max,
+            mode="per_example",
+            seed=1234,
         )
         signal = torch.zeros(8, 1, 1, 1200)
 
         y_hat = aug(signal)
         noise_gain = torch.abs(y_hat).amax(-1)
-        noise_max_db = amplitude_to_db(noise_gain).flatten()
+        noise_max_db = amplitude_to_db(noise_gain, amin=1e-8, top_db=100.0).flatten()
 
         # Compare the first one against all the others;
         # they should be mostly different.
         noise_db_0 = noise_max_db[0]
         for noise_gain_ in noise_max_db[1:]:
             # we should see no differences < .2dB.
-            assert (noise_db_0 - noise_gain_).abs() > 0.2
+            assert (noise_db_0 - noise_gain_).abs() > 0.02
+
+
+class TestNormAugmentation:
+    def test_hard_norm_to_1(self):
+        aug = NormAugmentation(set_norm_to_dbfs=0, mode="per_example")
+        # Signal should have max ~1.2.
+        signal = (torch.rand(2, 1, 1, 400) * 2 - 1) * 1.2
+
+        y_hat = aug(signal)
+
+        signal_max = y_hat.amax(dim=-1)
+        assert (signal_max <= 1.0).all()
+
+    def test_norm_to_max_range(self):
+        max_range_db = torch.tensor([-3.0, -0.5])
+        max_range_a = db_to_amplitude(max_range_db)
+        aug = NormAugmentation(set_norm_to_dbfs=max_range_db, mode="per_example")
+        # Signal should have max ~1.2.
+        signal = (torch.rand(2, 1, 1, 400) * 2 - 1) * 1.5
+
+        y_hat, log = aug(signal, log=True)
+
+        signal_max = y_hat.amax(dim=-1)
+        assert (max_range_a[0] <= signal_max).all() and (
+            signal_max < max_range_a[1]
+        ).all()
+
+    def test_threshold_norm(self):
+        """don't apply the norm if the signal is below the threshold."""
+        norm_dbfs = (-3.0, -0.5)
+        norm_dbfs_a = db_to_amplitude(norm_dbfs)
+        threshold_db = -0.5
+        aug = NormAugmentation(
+            set_norm_to_dbfs=norm_dbfs, threshold_dbfs=threshold_db, mode="per_example"
+        )
+
+        signal_maxes = torch.tensor([1.5, 0.8, 1.01, 0.9]).reshape(4, 1, 1, 1)
+        signal = (torch.rand(4, 1, 1, 400) * 2 - 1) * signal_maxes
+
+        y_hat, log = aug(signal, log=True)
+
+        signal_max = y_hat.amax(dim=-1)
+        # [0] should have been normed
+        assert norm_dbfs_a[0] <= signal_max[0].item() < norm_dbfs_a[1]
+        # [1] should NOT have been normed, so should be the same
+        assert signal_max[1].item() == signal[1].amax()
+        # [2] should have been normed
+        assert norm_dbfs_a[0] <= signal_max[2].item() < norm_dbfs_a[1]
+        # [3] shoudl NOT have been normed
+        assert signal_max[3].item() == signal[3].amax()
 
 
 @pytest.mark.parametrize("ndim", [2, 3, 4])

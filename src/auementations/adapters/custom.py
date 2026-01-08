@@ -7,7 +7,7 @@ from auementations.config.config_store import auementations_store
 from auementations.core.base import BaseAugmentation
 from auementations.utils import amplitude_to_db, db_to_amplitude
 
-__all__ = ["GainAugmentation", "NoiseAugmentation"]
+__all__ = ["GainAugmentation", "NoiseAugmentation", "NormAugmentation"]
 
 
 @auementations_store(name="gain", group="auementations")
@@ -135,6 +135,62 @@ class NoiseAugmentation(BaseAugmentation):
         noise_sig = noise_sig * random_gain_in_a
 
         return x + noise_sig
+
+
+@auementations_store(name="norm", group="auementations")
+class NormAugmentation(BaseAugmentation):
+    """Apply a normalization to the signal.
+
+    You can apply it as a randon range of norm values by passing a tuple.
+    You can also *only* normalize if the signal is above a threshold by passing
+     a threshold.
+    """
+
+    def __init__(
+        self,
+        sample_rate: int | float | None = None,
+        p: float = 1.0,
+        mode: str = "per_batch",
+        seed: int | None = None,
+        set_norm_to_dbfs: float | tuple[float] = 1.0,
+        threshold_dbfs: float | None = None,
+    ):
+        super().__init__(sample_rate=sample_rate, p=p, mode=mode, seed=seed)
+
+        self.set_norm_to_dbfs = set_norm_to_dbfs
+        self.threshold = (
+            db_to_amplitude(torch.as_tensor(threshold_dbfs))
+            if threshold_dbfs is not None
+            else None
+        )
+
+    def randomize_parameters(self) -> dict[str, Any]:
+        if isinstance(self.set_norm_to_dbfs, float):
+            self.selected_max_db = self.set_norm_to_dbfs
+        elif (
+            isinstance(self.set_norm_to_dbfs, (tuple, Tensor))
+            and len(self.set_norm_to_dbfs) == 2
+        ):
+            self.selected_max_db = self.rng.uniform(*self.set_norm_to_dbfs)
+        else:
+            self.selected_max_db = 0.0
+
+        self.selected_max_a = db_to_amplitude(torch.as_tensor(self.selected_max_db))
+
+        return {"norm_value": self.selected_max_a, "threshold": self.threshold}
+
+    def forward(self, x):
+        x_max = x.amax()
+
+        if self.threshold is None or (
+            self.threshold is not None and x_max > self.threshold
+        ):
+            scale_value = self.selected_max_a / x_max
+
+        else:  # self.threshold is not None:
+            scale_value = 1.0
+
+        return x * scale_value
 
 
 # @auementations_store(name="relative_noise", group="auementations")

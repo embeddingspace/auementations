@@ -10,7 +10,7 @@ from auementations.adapters.custom import (
     NormAugmentation,
 )
 from auementations.config.config_store import auementations_store
-from auementations.utils import amplitude_to_db
+from auementations.utils import amplitude_to_db, db_to_amplitude
 
 
 def has_uniform_gain(
@@ -350,7 +350,7 @@ class TestNoise:
 
 class TestNormAugmentation:
     def test_hard_norm_to_1(self):
-        aug = NormAugmentation(norm_value=1.0, mode="per_example")
+        aug = NormAugmentation(set_norm_to_dbfs=0, mode="per_example")
         # Signal should have max ~1.2.
         signal = (torch.rand(2, 1, 1, 400) * 2 - 1) * 1.2
 
@@ -360,22 +360,26 @@ class TestNormAugmentation:
         assert (signal_max <= 1.0).all()
 
     def test_norm_to_max_range(self):
-        max_range = (0.7, 0.9)
-        aug = NormAugmentation(norm_value=max_range, mode="per_example")
+        max_range_db = torch.tensor([-3.0, -0.5])
+        max_range_a = db_to_amplitude(max_range_db)
+        aug = NormAugmentation(set_norm_to_dbfs=max_range_db, mode="per_example")
         # Signal should have max ~1.2.
         signal = (torch.rand(2, 1, 1, 400) * 2 - 1) * 1.5
 
         y_hat, log = aug(signal, log=True)
 
         signal_max = y_hat.amax(dim=-1)
-        assert (max_range[0] <= signal_max).all() and (signal_max < max_range[1]).all()
+        assert (max_range_a[0] <= signal_max).all() and (
+            signal_max < max_range_a[1]
+        ).all()
 
     def test_threshold_norm(self):
         """don't apply the norm if the signal is below the threshold."""
-        max_range = (0.7, 0.9)
-        threshold = 0.95
+        norm_dbfs = (-3.0, -0.5)
+        norm_dbfs_a = db_to_amplitude(norm_dbfs)
+        threshold_db = -0.5
         aug = NormAugmentation(
-            norm_value=max_range, threshold=threshold, mode="per_example"
+            set_norm_to_dbfs=norm_dbfs, threshold_dbfs=threshold_db, mode="per_example"
         )
 
         signal_maxes = torch.tensor([1.5, 0.8, 1.01, 0.9]).reshape(4, 1, 1, 1)
@@ -385,11 +389,11 @@ class TestNormAugmentation:
 
         signal_max = y_hat.amax(dim=-1)
         # [0] should have been normed
-        assert max_range[0] <= signal_max[0].item() < max_range[1]
+        assert norm_dbfs_a[0] <= signal_max[0].item() < norm_dbfs_a[1]
         # [1] should NOT have been normed, so should be the same
         assert signal_max[1].item() == signal[1].amax()
         # [2] should have been normed
-        assert max_range[0] <= signal_max[2].item() < max_range[1]
+        assert norm_dbfs_a[0] <= signal_max[2].item() < norm_dbfs_a[1]
         # [3] shoudl NOT have been normed
         assert signal_max[3].item() == signal[3].amax()
 

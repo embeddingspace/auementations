@@ -152,23 +152,32 @@ class NormAugmentation(BaseAugmentation):
         p: float = 1.0,
         mode: str = "per_batch",
         seed: int | None = None,
-        norm_value: float | tuple[float] = 1.0,
-        threshold: float | None = None,
+        set_norm_to_dbfs: float | tuple[float] = 1.0,
+        threshold_dbfs: float | None = None,
     ):
         super().__init__(sample_rate=sample_rate, p=p, mode=mode, seed=seed)
 
-        self.norm_value = norm_value
-        self.threshold = threshold
+        self.set_norm_to_dbfs = set_norm_to_dbfs
+        self.threshold = (
+            db_to_amplitude(torch.as_tensor(threshold_dbfs))
+            if threshold_dbfs is not None
+            else None
+        )
 
     def randomize_parameters(self) -> dict[str, Any]:
-        if isinstance(self.norm_value, float):
-            self.selected_max = self.norm_value
-        elif isinstance(self.norm_value, tuple) and len(self.norm_value) == 2:
-            self.selected_max = self.rng.uniform(*self.norm_value)
+        if isinstance(self.set_norm_to_dbfs, float):
+            self.selected_max_db = self.set_norm_to_dbfs
+        elif (
+            isinstance(self.set_norm_to_dbfs, (tuple, Tensor))
+            and len(self.set_norm_to_dbfs) == 2
+        ):
+            self.selected_max_db = self.rng.uniform(*self.set_norm_to_dbfs)
         else:
-            self.selected_max = 1.0
+            self.selected_max_db = 0.0
 
-        return {"norm_value": self.selected_max, "threshold": self.threshold}
+        self.selected_max_a = db_to_amplitude(torch.as_tensor(self.selected_max_db))
+
+        return {"norm_value": self.selected_max_a, "threshold": self.threshold}
 
     def forward(self, x):
         x_max = x.amax()
@@ -176,7 +185,7 @@ class NormAugmentation(BaseAugmentation):
         if self.threshold is None or (
             self.threshold is not None and x_max > self.threshold
         ):
-            scale_value = self.selected_max / x_max
+            scale_value = self.selected_max_a / x_max
 
         else:  # self.threshold is not None:
             scale_value = 1.0
